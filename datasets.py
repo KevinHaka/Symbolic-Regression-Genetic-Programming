@@ -1,3 +1,4 @@
+# Libraries and modules
 import pandas as pd
 import numpy as np
 
@@ -35,8 +36,8 @@ def load_datasets(
     
     # Define mapping of dataset names to generation functions
     custom_functions = {
-        'F1': generate_F1_dataset,
-        'F2': generate_F2_dataset,
+        'F1': _generate_F1_dataset,
+        'F2': _generate_F2_dataset,
     }
     
     # Define PMLB (Penn Machine Learning Benchmarks) dataset names and functions
@@ -47,8 +48,8 @@ def load_datasets(
     
     # Define UCI ML Repository datasets with their loading functions
     uci_dataset_names = {
-        "Communities and Crime": communities_and_crime,
-        "Communities and Crime Unnormalized": communities_and_crime_unnormalized,
+        "Communities and Crime": _communities_and_crime,
+        "Communities and Crime Unnormalized": _communities_and_crime_unnormalized,
     }
 
     # Process each requested dataset
@@ -132,7 +133,7 @@ def _505_tecator(
     return X, y
 
 # Functions to load specific datasets from UCI ML repository
-def communities_and_crime(
+def _communities_and_crime(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """ 
     Load the Communities and Crime dataset from UCI ML repository.
@@ -172,7 +173,7 @@ def communities_and_crime(
     
     return X, y
 
-def communities_and_crime_unnormalized(
+def _communities_and_crime_unnormalized(
     target: str = 'violentPerPop'
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
@@ -199,7 +200,7 @@ def communities_and_crime_unnormalized(
     # Fetch dataset from UCI ML repository
     dataset = fetch_ucirepo(name="Communities and Crime Unnormalized")
     
-    # Define features to remove: all targets except the chosen one + identifiers
+    # Define features to remove: all other targets (except chosen one) + identifier columns
     removing_features = dataset.data.targets.columns.to_list() + [
         'communityname', 'countyCode', 'communityCode', 'State', 'fold'
     ]
@@ -222,7 +223,7 @@ def communities_and_crime_unnormalized(
     return X, y
 
 # Functions to generate synthetic datasets
-def generate_F1_dataset(
+def _generate_F1_dataset(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
     Generate the F1 synthetic dataset based on Newton's law of gravitation.
@@ -231,7 +232,7 @@ def generate_F1_dataset(
     features to test feature selection methods. The target follows Newton's gravitational
     law formula.
 
-    Formula: F1 = -g * (X1 * X2) / X3^2
+    Formula: F1 = -g * (X1 * X2) / X3**2
     where g = 6.67408e-11 (gravitational constant)
 
     Returns
@@ -268,7 +269,7 @@ def generate_F1_dataset(
 
     return X, y
 
-def generate_F2_dataset(
+def _generate_F2_dataset(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
     Generate the F2 synthetic dataset as described in Wang et al., 2024.
@@ -277,15 +278,15 @@ def generate_F2_dataset(
     "Improving Generalization of Genetic Programming for High-Dimensional 
     Symbolic Regression with Shapley Value Based Feature Selection" paper.
 
-    Formula: F2 = 30 * X1 * X3 / ((X1 - 10) * X2^2)
+    Formula: F2 = 30 * X1 * X3 / ((X1 - 10) * X2**2)
 
     Returns
     -------
-    data : pandas.DataFrame
+    X : pandas.DataFrame
         Feature matrix with shape (11000, 53). Contains X1, X2, X3 (informative)
         and 50 noise features (noise_1, noise_2, ..., noise_50).
-    F2 : np.ndarray
-        Target values with shape (11000,). Complex rational function values.
+    y : np.ndarray
+        Target values with shape (11000,). Rational function values following F2 formula.
     """
 
     n_noise_features = 50
