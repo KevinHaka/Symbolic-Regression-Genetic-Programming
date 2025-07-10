@@ -9,7 +9,6 @@ from typing import Callable, Optional
 from sklearn.preprocessing import StandardScaler
 from npeet import entropy_estimators as ee
 
-
 def _lambda_func_shap(
     X: np.ndarray, 
     lambda_func: Callable

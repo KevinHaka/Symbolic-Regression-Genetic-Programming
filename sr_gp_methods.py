@@ -11,7 +11,6 @@ from inspect import signature
 from fs_methods import cmi_feature_selection, shap_feature_selection
 from pysr_utils import train_val_test_split, fit_and_evaluate_best_equation, cumulative_lambda
 
-
 def gp(
     X: pd.DataFrame,
     y: np.ndarray,
