@@ -1,0 +1,3 @@
+# Folder to ignore
+outputs/
+__pycache__/
