@@ -152,7 +152,8 @@ def shap_feature_selection(
             # Compute SHAP values for each feature in the equation
             shap_values = explainer.shap_values(X_foreground, silent=True)
             # Use absolute values and average across samples to get feature importance
-            feature_shap_values = np.abs(shap_values).mean(axis=0)
+            feature_shap_values = np.mean(shap_values, axis=0)
+            # feature_shap_values = np.abs(shap_values).mean(axis=0)
 
             # Aggregate SHAP values across equations (normalize by number of equations)
             for feature_shap_value, var_name in zip(feature_shap_values, str_variables):
@@ -162,7 +163,7 @@ def shap_feature_selection(
     selected_features = sorted(mean_shap_values, key=mean_shap_values.get, reverse=True)[:n_top_features]
     mean_shap_values_selected_features = [mean_shap_values[feature] for feature in selected_features]
 
-    return selected_features, mean_shap_values_selected_features, train_val_test_sets_list
+    return selected_features, mean_shap_values_selected_features
 
 def cmi_feature_selection2(
     X: pd.DataFrame,
