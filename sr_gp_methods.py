@@ -8,144 +8,64 @@ from inspect import signature
 from tqdm import tqdm
 
 from pysr import PySRRegressor
-from pysr_utils import best_equation
-
-from fs_techniques import cmi_feature_selection, shap_feature_selection
+from pysr_utils import best_equation, nrmse_loss
 from pysr_utils import train_val_test_split, fit_and_evaluate_best_equation, cumulative_lambda
+from fs_techniques import cmi_feature_selection, shap_feature_selection
 
 def gp(
-    X: pd.DataFrame,
-    y: np.ndarray,
-    loss_function: Callable,
-    n_runs: int = 100,
+    train_val_test_sets_list: Optional[tuple],
+    loss_function: Callable = nrmse_loss,
     record_interval: int = 1,
-    test_size: float = 0.2,
-    val_size: float = 0.25,
     pysr_params: Optional[dict] = None
-) -> tuple[dict, list, list, tuple[list, list, list, list, list, list]]:
-    """
-    Perform symbolic regression using PySR over multiple runs.
-
-    For each run, this function:
-      - Splits the data into train/validation/test sets.
-      - Fits a symbolic regressor (PySR) to the training data.
-      - Records training, validation, and test losses at each recording interval.
-      - Stores the best equation found in each run.
-
-    Parameters
-    ----------
-    X : pandas.DataFrame
-        Feature matrix.
-    y : array-like
-        Target vector.
-    loss_function : Callable
-        Function to compute the loss between true and predicted values.
-    n_runs : int, optional
-        Number of runs for model training and evaluation (default: 100).
-    record_interval : int, optional
-        Number of generations (iterations) between each recording of training, validation, and test losses.
-        For example, if record_interval=2, losses are recorded every 2 generations. Default is 1.
-    test_size : float, optional
-        Proportion of data to use for testing (default: 0.2).
-    val_size : float, optional
-        Proportion of remaining data to use for validation (default: 0.25).
-    pysr_params : dict, optional
-        Parameters to pass to PySRRegressor (default: None).
-
-    Returns
-    -------
-    results : dict
-        Dictionary containing arrays of training, validation, and test losses for each run.
-        Format: results['GP']['training_loss'][run, :], results['GP']['validation_loss'][run, :], 
-        results['GP']['test_loss'][run, :].
-    features : list of str
-        List of feature names (column names) used in the regression.
-    best_eqs : list
-        List containing the best equation object from each run.
-    train_val_test_sets_list : tuple of lists
-        Tuple of six lists: (X_train_list, X_val_list, X_test_list, y_train_list, y_val_list, y_test_list),
-        where each list contains the corresponding split for each run.
-
-    Notes
-    -----
-    The function performs multiple independent runs with different train/val/test splits.
-    Losses are recorded at each interval as determined by record_interval.
-    """
-
+) -> tuple[dict, list, list]:
+    
     if pysr_params is None: pysr_params = {}
     method_name = "GP"
 
     # Determine the total number of iterations and how many times to record losses
     niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
     n_records = niterations // record_interval
-    
+
     # Initialize variables
-    results = { method_name: {
+    n_runs = len(train_val_test_sets_list)
+    results = {
         "training_loss": np.empty((n_runs, n_records)),
         "validation_loss": np.empty((n_runs, n_records)),
         "test_loss": np.empty((n_runs, n_records))
-    } }
-    features = X.columns.to_list()
+    }
+    features = train_val_test_sets_list[0][0].columns.tolist()
     best_eqs = []
-
-    # Create six lists, one for each split
-    X_train_list, X_val_list, X_test_list = [], [], []
-    y_train_list, y_val_list, y_test_list = [], [], []
 
     print(f"{method_name+' ':-<20}")
 
-    def _run_once():
-        # Split data into train/val/test sets
-        train_val_test_sets = train_val_test_split(X, y, test_size, val_size)
-
-        # Fit and evaluate the model
-        evaluation = fit_and_evaluate_best_equation(
-            train_val_test_sets, loss_function, record_interval, pysr_params
-        )
-
-        return train_val_test_sets, evaluation
-
     # Use Parallel processing to run the function in parallel
     outputs = Parallel(n_jobs=-1)(
-        delayed(_run_once)() for _ in tqdm(
+        delayed(fit_and_evaluate_best_equation)(
+            train_val_test_sets_list[run], 
+            loss_function, 
+            record_interval, 
+            pysr_params
+        ) for run in tqdm(
             range(n_runs), 
             desc=f"{method_name} "
         )
     )
 
     # Unpack the outputs into the respective lists
-    for run, (train_val_test_sets, evaluation) in enumerate(outputs):
-        # Store each split separately
-        X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_sets
-        X_train_list.append(X_train)
-        X_val_list.append(X_val)
-        X_test_list.append(X_test)
-        y_train_list.append(y_train)
-        y_val_list.append(y_val)
-        y_test_list.append(y_test)
-
+    for run, (training_losses, validation_losses, test_losses, best_eq) in enumerate(outputs):
         # Store results
-        training_losses, validation_losses, test_losses, best_eq = evaluation
-        results[method_name]["training_loss"][run] = training_losses
-        results[method_name]["validation_loss"][run] = validation_losses
-        results[method_name]["test_loss"][run] = test_losses
+        results["training_loss"][run] = training_losses
+        results["validation_loss"][run] = validation_losses
+        results["test_loss"][run] = test_losses
         best_eqs.append(best_eq)
 
-    # Return as a tuple of lists for clarity
-    train_val_test_sets_list = (X_train_list, X_val_list, X_test_list, y_train_list, y_val_list, y_test_list)
-    return results, features, best_eqs, train_val_test_sets_list
+    return results, features, best_eqs
 
 def gpshap(
-    X: pd.DataFrame,
-    y: np.ndarray,
-    loss_function: Callable,
-    n_runs: int = 100,
-    record_interval: int = 1,
-    top_features_ratio: Optional[float] = None,
+    train_val_test_sets_list: Optional[tuple],
     gp_best_equations: Optional[list] = None,
-    train_val_test_sets_list: Optional[tuple] = None,
-    test_size: float = 0.2,
-    val_size: float = 0.25,
+    loss_function: Callable = nrmse_loss,
+    record_interval: int = 1,
     pysr_params: Optional[dict] = None
 ) -> tuple[dict, list, list]:
 
@@ -157,59 +77,54 @@ def gpshap(
     n_records = niterations // record_interval
     
     # Initialize variables
-    results = { method_name: {
+    n_runs = len(train_val_test_sets_list)
+    n_features = train_val_test_sets_list[0][0].shape[1]
+    results = {
         'training_loss': np.zeros((n_runs, n_records)),
         'validation_loss': np.zeros((n_runs, n_records)),
         'test_loss': np.zeros((n_runs, n_records))
-    } }
+    }
     best_eqs = []
+
+    X_train_list = [train_val_test_sets[0] for train_val_test_sets in train_val_test_sets_list]
     
-    # Check if gp_best_equations is provided and get its length
-    n_equations = len(gp_best_equations) if gp_best_equations is not None else 0
-    
-    # Select top features using SHAP values
     selected_features, _ = shap_feature_selection(
-        X, 
-        y, 
-        loss_function, 
-        n_runs, 
-        record_interval,
-        test_size, 
-        val_size,
-        top_features_ratio,
-        gp_best_equations,
-        train_val_test_sets_list,
-        pysr_params
+        n_top_features=max(1, round(np.log2(n_features))),
+        X_train_list=X_train_list,
+        gp_best_equations=gp_best_equations
     )
 
+    train_val_test_sets_list_filtered = [
+        (
+            X_train[selected_features],
+            X_val[selected_features],
+            X_test[selected_features],
+            y_train,
+            y_val,
+            y_test
+        ) for X_train, X_val, X_test, y_train, y_val, y_test in train_val_test_sets_list
+    ]
+
     print(f"{method_name+' ':-<20}")
-
-    def _run_once():
-        # Split data into train/val/test sets
-        train_val_test_sets = train_val_test_split(X, y, test_size, val_size)
-
-        # Fit and evaluate the model
-        evaluation = fit_and_evaluate_best_equation(
-            train_val_test_sets, loss_function, record_interval, pysr_params
-        )
-
-        return train_val_test_sets, evaluation
     
     # Use Parallel processing to run the function in parallel
     outputs = Parallel(n_jobs=-1)(
-        delayed(_run_once)() for _ in tqdm(
+        delayed(fit_and_evaluate_best_equation)(
+            train_val_test_sets_list_filtered[run], 
+            loss_function, 
+            record_interval, 
+            pysr_params
+        ) for run in tqdm(
             range(n_runs), 
             desc=f"{method_name} "
         )
     )
 
     # Unpack the outputs into the respective lists
-    for run, (_, evaluation) in enumerate(outputs):
-        # Store results
-        training_losses, validation_losses, test_losses, best_eq = evaluation
-        results[method_name]["training_loss"][run] = training_losses
-        results[method_name]["validation_loss"][run] = validation_losses
-        results[method_name]["test_loss"][run] = test_losses
+    for run, (training_losses, validation_losses, test_losses, best_eq) in enumerate(outputs):
+        results["training_loss"][run] = training_losses
+        results["validation_loss"][run] = validation_losses
+        results["test_loss"][run] = test_losses
         best_eqs.append(best_eq)
 
     return results, selected_features, best_eqs
@@ -217,11 +132,12 @@ def gpshap(
 def gpcmi(
     X: pd.DataFrame, 
     y: np.ndarray,
-    loss_function: Callable,
+    loss_function: Callable = nrmse_loss,
     n_runs: int = 100,
     record_interval: int = 1,
     test_size: float = 0.2,
     val_size: float = 0.25,
+    train_val_test_sets_list: Optional[tuple] = None,
     fs_params: Optional[dict] = {},
     pysr_params: Optional[dict] = None
 ) -> tuple[dict, list, list]:
@@ -286,44 +202,65 @@ def gpcmi(
     best_eqs = []
 
     print(f"{method_name+" ":-<20}")
+    
+    # for 
+    # Select features using CMI feature selection
+    selected_features, _ = cmi_feature_selection(X_train, y_train, **fs_params)
 
-    for run in range(n_runs):
-        # Progress indicator
-        print(f". {run+1}\n" if ((run % 10 == 9) or (run + 1 == n_runs)) else ".", end="")
-
-        # Split data into train/val/test sets
-        X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_split(X, y, test_size, val_size)
-
-        # Select features using CMI feature selection
-        selected_features, _ = cmi_feature_selection(X_train, y_train, **fs_params)
-
-        split_selected_features = (
-            X_train[selected_features],
-            X_val[selected_features],
-            X_test[selected_features],
-            y_train,
-            y_val,
-            y_test
+    # Use Parallel processing to run the function in parallel
+    outputs = Parallel(n_jobs=-1)(
+        delayed(run_once)(
+            X, 
+            y, 
+            loss_function, 
+            record_interval, 
+            test_size, 
+            val_size, 
+            train_val_test_sets_list[run] if train_val_test_sets_list is not None else None,
+            pysr_params
+        ) for run in tqdm(
+            range(n_runs), 
+            desc=f"{method_name} "
         )
+    )
 
-         # Fit and evaluate the model using only the selected features
-        training_losses, validation_losses, test_losses, best_eq = fit_and_evaluate_best_equation(
-            split_selected_features, loss_function, record_interval, pysr_params
-        )
+    # for run in range(n_runs):
+    #     # Progress indicator
+    #     print(f". {run+1}\n" if ((run % 10 == 9) or (run + 1 == n_runs)) else ".", end="")
 
-        # Store results for this run
-        results[method_name]["training_loss"][run] = training_losses
-        results[method_name]["validation_loss"][run] = validation_losses
-        results[method_name]["test_loss"][run] = test_losses
-        selected_features_list.append(selected_features)
-        best_eqs.append(best_eq)
+    #     # Split data into train/val/test sets
+    #     X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_split(X, y, test_size, val_size)
+
+    #     # Select features using CMI feature selection
+    #     selected_features, _ = cmi_feature_selection(X_train, y_train, **fs_params)
+
+    #     split_selected_features = (
+    #         X_train[selected_features],
+    #         X_val[selected_features],
+    #         X_test[selected_features],
+    #         y_train,
+    #         y_val,
+    #         y_test
+    #     )
+
+    #      # Fit and evaluate the model using only the selected features
+    #     training_losses, validation_losses, test_losses, best_eq = fit_and_evaluate_best_equation(
+    #         split_selected_features, loss_function, record_interval, pysr_params
+    #     )
+
+    #     # Store results for this run
+    #     results[method_name]["training_loss"][run] = training_losses
+    #     results[method_name]["validation_loss"][run] = validation_losses
+    #     results[method_name]["test_loss"][run] = test_losses
+    #     selected_features_list.append(selected_features)
+    #     best_eqs.append(best_eq)
 
     return results, selected_features_list, best_eqs
 
 def new_method(
     X: pd.DataFrame,
     y: np.ndarray,
-    loss_function: Callable,
+    loss_function: Callable = nrmse_loss,
     n_submodels: int = 2,
     n_runs: int = 100,
     record_interval: int = 1,

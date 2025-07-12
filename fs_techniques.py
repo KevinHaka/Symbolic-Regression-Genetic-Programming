@@ -34,103 +34,21 @@ def _lambda_func_shap(
     return lambda_func(*[X[:, i] for i in range(X.shape[1])])
 
 def shap_feature_selection(
-    X: pd.DataFrame,
-    y: np.ndarray,
-    loss_function: Callable,
-    n_runs: int = 100,
-    record_interval: int = 1,
-    test_size: float = 0.2,
-    val_size: float = 0.25,
-    top_features_ratio: Optional[float] = None,
-    gp_best_equations: Optional[list] = None,
-    train_val_test_sets_list: Optional[tuple] = None,
-    pysr_params: Optional[dict] = None
+    n_top_features: int,
+    X_train_list: Optional[tuple],
+    gp_best_equations: Optional[list]
 ) -> tuple[list[str], list[float], tuple]:
-    """
-    Perform feature selection using SHAP (SHapley Additive exPlanations) values.
-    
-    This function uses genetic programming to discover equations and then applies
-    SHAP analysis to identify the most important features across all discovered
-    equations. Features are ranked by their mean absolute SHAP values.
-    
-    The method works by:
-    1. Running genetic programming to discover multiple equations (if not provided)
-    2. For each equation, computing SHAP values to measure feature importance
-    3. Aggregating SHAP values across all equations
-    4. Selecting top features based on mean SHAP importance
-    
-    Parameters
-    ----------
-    X : pd.DataFrame
-        Feature matrix with shape (n_samples, n_features).
-    y : np.ndarray
-        Target vector with shape (n_samples,).
-    loss_function : callable
-        Loss function to evaluate equation quality during GP.
-    n_runs : int, default=100
-        Number of GP runs to perform (if equations not provided).
-    record_interval : int, default=1
-        Interval for recording GP progress.
-    test_size : float, default=0.2
-        Proportion of data for testing split.
-    val_size : float, default=0.25
-        Proportion of training data for validation split.
-    top_features_ratio : float, optional
-        Ratio of features to select (e.g., 0.1 for top 10%).
-        If None, uses log2(n_features) as default.
-    gp_best_equations : list, optional
-        Pre-computed list of best equations from GP runs.
-        If None, GP will be run to generate equations.
-    train_val_test_sets_list : tuple, optional
-        Pre-computed data splits. If None, splits will be generated.
-    pysr_params : dict, optional
-        Parameters for PySR if used in GP.
-        
-    Returns
-    -------
-    selected_features : list of str
-        Names of selected features ranked by SHAP importance.
-    mean_shap_values_selected_features : list of float
-        Mean SHAP values for the selected features.
-    train_val_test_sets_list : tuple
-        Data splits used for analysis (for consistency with other methods).
-    """
-    
-    # If no precomputed equations or train_val_test_sets_list, run gp() to get them
-    if (gp_best_equations is None) or (train_val_test_sets_list is None):
-        from sr_gp_methods import gp  # Import here to avoid circular import
-        
-        _, _, gp_best_equations, train_val_test_sets_list = gp(
-            X, 
-            y, 
-            loss_function, 
-            n_runs, 
-            record_interval,
-            test_size, 
-            val_size, 
-            pysr_params
-        )
     
     # Initialize SHAP value aggregation
     mean_shap_values = {}
     n_equations = len(gp_best_equations)
-    
-    # Determine number of top features to select
-    if isinstance(top_features_ratio, float):
-        n_top_features = max(1, round(top_features_ratio * X.shape[1]))
-    else:
-        # Default: select log2(n_features) features if ratio not specified
-        n_top_features = max(1, round(np.log2(X.shape[1])))
-
-    # Extract training data for SHAP analysis
-    X_train_list = train_val_test_sets_list[0]
 
     # Process each equation to compute SHAP values
     for gp_best_equation, X_train in zip(gp_best_equations, X_train_list):
         # Convert GP equation to sympy format and extract variables
-        sympy_expr = gp_best_equation.sympy_format.simplify()
-        expr_variables = sorted(sympy_expr.free_symbols, key=lambda s: str(s))
-
+        sympy_expr = gp_best_equation.sympy_format
+        expr_variables = sorted(sympy_expr.free_symbols, key=lambda s: str(s)) # TODO: I dont know why I short
+        
         # Skip equations with no variables
         if len(expr_variables) >= 1:
             # Create numpy-compatible lambda function from sympy expression
@@ -172,44 +90,6 @@ def cmi_feature_selection2(
     top_features_ratio: Optional[float] = None,
     min_relative_mi_gain: float = 0.05
 ) -> tuple[list[str], list[float]]:
-    """
-    Perform feature selection using Conditional Mutual Information (CMI).
-    
-    This function implements an iterative feature selection algorithm based on
-    conditional mutual information. It greedily selects features that have the
-    highest mutual information with the target variable, conditioned on the
-    already selected features.
-    
-    The algorithm works as follows:
-    1. Start with no selected features
-    2. For each remaining feature, compute CMI with target given selected features
-    3. Select the feature with highest CMI
-    4. Repeat until stopping criterion is met
-    
-    Parameters
-    ----------
-    X : pd.DataFrame
-        Feature matrix with shape (n_samples, n_features).
-    y : np.ndarray
-        Target vector with shape (n_samples,).
-    k : int, default=3
-        Number of nearest neighbors for MI estimation using k-NN entropy estimator.
-        Higher values provide more stable estimates but are computationally more expensive.
-    top_features_ratio : float, optional
-        Ratio of features to select (e.g., 0.1 for top 10% of features).
-        If None, uses adaptive stopping criterion based on MI gain.
-    min_relative_mi_gain : float, default=0.05
-        Minimum relative MI gain for adaptive stopping. Only used when
-        top_features_ratio is None. Selection stops when the MI gain of
-        the next feature is less than this fraction of cumulative MI.
-        
-    Returns
-    -------
-    selected_features : list of str
-        Names of selected features in order of selection (highest CMI first).
-    cmi_values_selected_features : list of float
-        CMI values for the selected features in order of selection.
-    """
     
     # Initialize algorithm state
     scaler = StandardScaler()
@@ -268,7 +148,6 @@ def cmi_feature_selection(
     X: pd.DataFrame,
     y: np.ndarray,
     k: int = 3,
-    top_features_ratio: Optional[float] = None,
     alpha: float = 0.01,
 ) -> tuple[list[str], list[float]]:
     
@@ -278,14 +157,6 @@ def cmi_feature_selection(
     cmi_values_selected_features = []
     selected_features = []
 
-    # Determine stopping criterion
-    if isinstance(top_features_ratio, float):
-        # Fixed number of features to select
-        n_top_features = max(1, round(top_features_ratio * X.shape[1]))
-    else:
-        # Adaptive stopping based on MI gain
-        n_top_features = None
-
     # Standardize data for stable MI estimation
     # MI estimation via k-NN requires normalized features
     X_scaled = scaler.fit_transform(X.copy())
@@ -293,7 +164,7 @@ def cmi_feature_selection(
     X_scaled = pd.DataFrame(X_scaled, columns=remaining_features)
 
     # Greedy feature selection loop
-    while remaining_features and ((n_top_features is None) or (len(selected_features) < n_top_features)):
+    while remaining_features:
         cmi_per_feature = {}
 
         # Compute CMI for each remaining feature
