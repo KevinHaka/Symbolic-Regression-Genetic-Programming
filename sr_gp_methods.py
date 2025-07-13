@@ -13,7 +13,7 @@ from pysr_utils import train_val_test_split, fit_and_evaluate_best_equation, cum
 from fs_techniques import cmi_feature_selection, shap_feature_selection
 
 def gp(
-    train_val_test_sets_list: Optional[tuple],
+    train_val_test_sets_list: tuple,
     loss_function: Callable = nrmse_loss,
     record_interval: int = 1,
     pysr_params: Optional[dict] = None
@@ -62,7 +62,7 @@ def gp(
     return results, features, best_eqs
 
 def gpshap(
-    train_val_test_sets_list: Optional[tuple],
+    train_val_test_sets_list: tuple,
     gp_best_equations: Optional[list] = None,
     loss_function: Callable = nrmse_loss,
     record_interval: int = 1,
@@ -130,59 +130,12 @@ def gpshap(
     return results, selected_features, best_eqs
 
 def gpcmi(
-    X: pd.DataFrame, 
-    y: np.ndarray,
+    train_val_test_sets_list: tuple,
     loss_function: Callable = nrmse_loss,
-    n_runs: int = 100,
     record_interval: int = 1,
-    test_size: float = 0.2,
-    val_size: float = 0.25,
-    train_val_test_sets_list: Optional[tuple] = None,
-    fs_params: Optional[dict] = {},
-    pysr_params: Optional[dict] = None
+    pysr_params: Optional[dict] = None,
+    fs_params: Optional[dict] = None,
 ) -> tuple[dict, list, list]:
-    """
-    Perform feature selection using conditional mutual information (CMI),
-    then fit symbolic regression models on the selected features.
-
-    For each run, this function:
-      - Selects features using the CMI method.
-      - Trains a PySR model using only the selected features.
-      - Evaluates and records training and test losses.
-      - Stores the best equation for each run.
-
-    Parameters
-    ----------
-    X : pandas.DataFrame
-        Feature matrix.
-    y : np.ndarray
-        Target vector.
-    loss_function : Callable
-        Function to compute the loss between true and predicted values.
-    n_runs : int, optional
-        Number of runs for model training and evaluation (default: 100).
-    record_interval : int, optional
-        Number of generations (iterations) between each recording of training, validation, and test losses.
-        For example, if record_interval=2, losses are recorded every 2 generations. Default is 1.
-    test_size : float, optional
-        Proportion of data to use for testing (default: 0.2).
-    val_size : float, optional
-        Proportion of remaining data to use for validation (default: 0.25).
-    fs_params : dict, optional
-        Parameters to pass to the MI feature selection function (default: None).
-    pysr_params : dict, optional
-        Parameters to pass to PySRRegressor (default: None).
-
-    Returns
-    -------
-    results : dict
-        Dictionary containing training and test losses for each run.
-        Format: results[method][loss_type][run]
-    selected_features : list of str
-        List of selected feature names, ordered by importance.
-    best_eqs : list
-        List containing the best equation object from each run.
-    """
 
     if pysr_params is None: pysr_params = {}
     if fs_params is None: fs_params = {}
@@ -193,30 +146,46 @@ def gpcmi(
     n_records = niterations // record_interval
 
     # Initialize variables
-    results = { method_name: {
+    n_runs = len(train_val_test_sets_list)
+    results = {
         "training_loss": np.zeros((n_runs, n_records)),
         "validation_loss": np.zeros((n_runs, n_records)),
         "test_loss": np.zeros((n_runs, n_records))
-    } }
+    }
     selected_features_list = []
     best_eqs = []
 
     print(f"{method_name+" ":-<20}")
-    
-    # for 
-    # Select features using CMI feature selection
-    selected_features, _ = cmi_feature_selection(X_train, y_train, **fs_params)
+
+    selected_features_list = Parallel(n_jobs=-1)(
+        delayed(lambda X_train, y_train, fs_params: cmi_feature_selection(X_train, y_train, **fs_params)[0])(
+            X_train, y_train, fs_params
+        ) for X_train, _, _, y_train, _, _ in tqdm(
+            train_val_test_sets_list,
+            desc=f"{method_name} feature selection"
+        )
+    )
+
+    train_val_test_sets_list_filtered = []
+    for run in range(n_runs):
+        X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_sets_list[run]
+        selected_features = selected_features_list[run]
+
+        # Filter the train/val/test sets based on selected features
+        X_train_filtered = X_train[selected_features]
+        X_val_filtered = X_val[selected_features]
+        X_test_filtered = X_test[selected_features]
+        
+        train_val_test_sets_list_filtered.append(
+            (X_train_filtered, X_val_filtered, X_test_filtered, y_train, y_val, y_test)
+        )
 
     # Use Parallel processing to run the function in parallel
     outputs = Parallel(n_jobs=-1)(
-        delayed(run_once)(
-            X, 
-            y, 
+        delayed(fit_and_evaluate_best_equation)(
+            train_val_test_sets_list_filtered[run], 
             loss_function, 
             record_interval, 
-            test_size, 
-            val_size, 
-            train_val_test_sets_list[run] if train_val_test_sets_list is not None else None,
             pysr_params
         ) for run in tqdm(
             range(n_runs), 
@@ -224,189 +193,94 @@ def gpcmi(
         )
     )
 
-    # for run in range(n_runs):
-    #     # Progress indicator
-    #     print(f". {run+1}\n" if ((run % 10 == 9) or (run + 1 == n_runs)) else ".", end="")
-
-    #     # Split data into train/val/test sets
-    #     X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_split(X, y, test_size, val_size)
-
-    #     # Select features using CMI feature selection
-    #     selected_features, _ = cmi_feature_selection(X_train, y_train, **fs_params)
-
-    #     split_selected_features = (
-    #         X_train[selected_features],
-    #         X_val[selected_features],
-    #         X_test[selected_features],
-    #         y_train,
-    #         y_val,
-    #         y_test
-    #     )
-
-    #      # Fit and evaluate the model using only the selected features
-    #     training_losses, validation_losses, test_losses, best_eq = fit_and_evaluate_best_equation(
-    #         split_selected_features, loss_function, record_interval, pysr_params
-    #     )
-
-    #     # Store results for this run
-    #     results[method_name]["training_loss"][run] = training_losses
-    #     results[method_name]["validation_loss"][run] = validation_losses
-    #     results[method_name]["test_loss"][run] = test_losses
-    #     selected_features_list.append(selected_features)
-    #     best_eqs.append(best_eq)
+    # Unpack the outputs into the respective lists
+    for run, (training_losses, validation_losses, test_losses, best_eq) in enumerate(outputs):
+        results["training_loss"][run] = training_losses
+        results["validation_loss"][run] = validation_losses
+        results["test_loss"][run] = test_losses
+        best_eqs.append(best_eq)
 
     return results, selected_features_list, best_eqs
 
 def new_method(
-    X: pd.DataFrame,
-    y: np.ndarray,
-    loss_function: Callable = nrmse_loss,
+    method_params: dict,
     n_submodels: int = 2,
-    n_runs: int = 100,
-    record_interval: int = 1,
-    test_size: float = 0.2,
-    val_size: float = 0.25,
-    fs_params: Optional[dict] = None,
-    pysr_params: Optional[dict] = None
+    method_function: Callable = gp,
 ) -> tuple[dict, list, list]:
-    """
-    Perform iterative feature selection and symbolic regression with residual fitting.
 
-    For each run, this function:
-      - Splits the data into train/val/test sets.
-      - Iteratively selects features using CMI and fits a symbolic regressor to the residuals.
-      - Stores the best equations and selected features for each part.
-      - Aggregates training and test losses.
-
-    Parameters
-    ----------
-    X : pandas.DataFrame
-        Feature matrix.
-    y : np.ndarray
-        Target vector.
-    loss_function : Callable
-        Function to compute the loss between true and predicted values.
-    n_submodels : int, optional
-        Number of submodels (parts) to fit in each run (default: 2).
-    n_runs : int, optional
-        Number of runs for model training and evaluation (default: 100).
-    record_interval : int, optional
-        Number of generations (iterations) between each recording of training, validation, and test losses.
-        For example, if record_interval=2, losses are recorded every 2 generations. Default is 1.
-    test_size : float, optional
-        Proportion of data to use for testing (default: 0.2).
-    val_size : float, optional
-        Proportion of remaining data to use for validation (default: 0.25).
-    fs_params : dict, optional
-        Parameters to pass to the MI feature selection function (default: None).
-    pysr_params : dict, optional
-        Parameters to pass to PySRRegressor (default: None).
-
-    Returns
-    -------
-    results : dict
-        Dictionary containing training and test losses for each run.
-        Format: results[method][loss_type][run]
-    selected_features_list : list
-        List of lists, each containing the selected feature names for each part in a run.
-    best_eqs_list : list
-        List of lists, each containing the best equation objects for each part in a run.
-    """
-
-    if pysr_params is None: pysr_params = {}
-    if fs_params is None: fs_params = {}
-    method_name = "gpNEW"
-
-    # Determine the total number of iterations and how many times to record losses
-    niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
+    if 'pysr_params' not in method_params:
+        niterations = signature(PySRRegressor).parameters['niterations'].default
+        method_params['pysr_params'] = {}
+    elif method_params['pysr_params'] is None:
+        niterations = signature(PySRRegressor).parameters['niterations'].default
+        method_params['pysr_params'] = {}
+    else:
+        niterations = method_params['pysr_params'].get("niterations", signature(PySRRegressor).parameters['niterations'].default)
+    
+    record_interval = method_params.get("record_interval", signature(method_function).parameters['record_interval'].default)
     n_records = niterations // record_interval
+    n_runs = len(method_params['train_val_test_sets_list'])
+    
 
-    results = { method_name: {
+    results = {
         "training_loss": np.zeros((n_runs, n_records)),
         "validation_loss": np.zeros((n_runs, n_records)),
         "test_loss": np.zeros((n_runs, n_records))
-    } }
-    selected_features_list = []
-    best_eqs_list = []
+    }
+    selected_features_list = [[] for _ in range(n_runs)]
+    best_eqs = [[] for _ in range(n_runs)]
+    lambda_models = [[] for _ in range(n_runs)]
 
-    print(f"{method_name+' ':-<20}")
+    train_val_test_sets_list_original = method_params['train_val_test_sets_list'].copy()
 
-    for run in range(n_runs):
-        # Progress indicator
-        print(f". {run+1}\n" if ((run % 10 == 9) or (run + 1 == n_runs)) else ".", end="")
+    for sub_i in range(n_submodels):
+        submethod_name = f"{method_function.__name__}_{sub_i+1}/{n_submodels}"
+        print(f"{submethod_name+' ':-<20}")
 
-        # Initialize variables for this run
-        lambda_models = []
-        run_best_eqs = []
-        run_selected_features = []
+        low = sub_i * n_records // n_submodels
+        high = (sub_i + 1) * n_records // n_submodels
 
-        # Split data into train/val/test sets
-        X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_split(X, y, test_size, val_size)
+        method_params['pysr_params']['niterations'] = (high - low) * record_interval
+
+        # Run the method function
+        temp_results, temp_selected_features_list, temp_best_eqs = method_function(**method_params)
+
+        # Store the results in the main results dictionary
+        results["training_loss"][:, low:high] = temp_results["training_loss"]
+        results["validation_loss"][:, low:high] = temp_results["validation_loss"]
+        results["test_loss"][:, low:high] = temp_results["test_loss"]
+
+        for run in range(n_runs):
+            selected_features_list[run].append(temp_selected_features_list[run])
+            best_eqs[run].append(temp_best_eqs[run])
         
-        y_train_residual = y_train.copy()
-        y_val_residual   = y_val.copy()
+            lambda_expr = temp_best_eqs[run].lambda_format
+            selected_features = temp_selected_features_list[run]
+            lambda_models[run].append((lambda_expr, selected_features))
 
-        for sub_i in range(n_submodels):
-            # Initialize the PySRRegressor with warm_start=True to allow iterative fitting
-            model = PySRRegressor(warm_start=True, **pysr_params)
-            model.set_params(niterations=record_interval) # Adjust the number of generations per interval
-
-            low = int(n_records * sub_i / n_submodels)
-            high = int(n_records * (sub_i + 1) / n_submodels)
-
-            # Select features using CMI feature selection
-            selected_features, _ = cmi_feature_selection(X_train, y_train_residual, **fs_params)
-
+            X_train, X_val, X_test = train_val_test_sets_list_original[run][:3]
             X_train_curr = X_train[selected_features]
             X_val_curr = X_val[selected_features]
             X_test_curr = X_test[selected_features]
 
-            # Compute cumulative predictions from current submodels
-            train_cumulative_pred = cumulative_lambda(X_train, lambda_models)
-            val_cumulative_pred = cumulative_lambda(X_val, lambda_models)
-            test_cumulative_pred = cumulative_lambda(X_test, lambda_models)
+            y_train_residual, y_val_residual, y_test_residual = method_params['train_val_test_sets_list'][run][3:]
 
-            # Iteratively fit the model and record losses at each interval
-            for interval_idx in range(low, high):
-                # Fit the model for the current interval
-                model.fit(X_train_curr, y_train_residual)
-
-                # Cooncatenate the training and test sets
-                X_check = pd.concat([X_train_curr, X_test_curr], ignore_index=True)
-
-                # Select the best equation based on validation loss
-                best_eq = best_equation(model, X_val_curr, y_val_residual, loss_function, X_check)
-
-                assert best_eq is not None, "No valid equation found during fitting."
-                lambda_expr = best_eq.lambda_format 
-
-                # Compute losses on training, validation and test sets
-                results[method_name]["training_loss"][run, interval_idx] = loss_function(
-                    y_train, 
-                    train_cumulative_pred + lambda_expr(X_train_curr)
-                )
-                results[method_name]["validation_loss"][run, interval_idx] = loss_function(
-                    y_val, 
-                    val_cumulative_pred + lambda_expr(X_val_curr)
-                )
-                results[method_name]["test_loss"][run, interval_idx] = loss_function(
-                    y_test, 
-                    test_cumulative_pred + lambda_expr(X_test_curr)
-                )
-
-            # Store the lambda model and selected features
-            lambda_models.append((lambda_expr, selected_features))
-
-            # Update residuals for next part
             y_train_residual -= lambda_expr(X_train_curr)
             y_val_residual -= lambda_expr(X_val_curr)
+            y_test_residual -= lambda_expr(X_test_curr)
 
-            # Store the best equation and selected features for this part
-            run_best_eqs.append(best_eq)
-            run_selected_features.append(selected_features)
-        
-        # Store results for this run
-        selected_features_list.append(run_selected_features)
-        best_eqs_list.append(run_best_eqs)
+            method_params['train_val_test_sets_list'][run] = (
+                X_train, 
+                X_val, 
+                X_test, 
+                y_train_residual, 
+                y_val_residual, 
+                y_test_residual
+            )
 
-    return results, selected_features_list, best_eqs_list
+            # Compute cumulative predictions from current submodels
+            # train_cumulative_pred = cumulative_lambda(X_train, lambda_models[run])
+            # val_cumulative_pred = cumulative_lambda(X_val, lambda_models[run])
+            # test_cumulative_pred = cumulative_lambda(X_test, lambda_models[run])
+    
+    return results, selected_features_list, best_eqs

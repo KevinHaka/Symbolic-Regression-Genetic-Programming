@@ -47,7 +47,7 @@ def shap_feature_selection(
     for gp_best_equation, X_train in zip(gp_best_equations, X_train_list):
         # Convert GP equation to sympy format and extract variables
         sympy_expr = gp_best_equation.sympy_format
-        expr_variables = sorted(sympy_expr.free_symbols, key=lambda s: str(s)) # TODO: I dont know why I short
+        expr_variables = sorted(sympy_expr.free_symbols, key=lambda s: str(s))
         
         # Skip equations with no variables
         if len(expr_variables) >= 1:
