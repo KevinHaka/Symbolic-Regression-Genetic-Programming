@@ -300,8 +300,8 @@ def fit_and_evaluate_best_equation(
         Array of validation losses at each recording interval using the best equation.
     test_losses : np.ndarray
         Array of test losses at each recording interval using the best equation.
-    best_eq : object
-        The best equation object found on the validation set at the last interval.
+    best_eqs : list[pd.Series]
+        List of the best equations selected at each recording interval.
 
     Notes
     -----
@@ -310,6 +310,7 @@ def fit_and_evaluate_best_equation(
     """
 
     if pysr_params is None: pysr_params = {}
+    best_eqs = []
 
     # Determine the total number of iterations and how many times to record losses
     niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
@@ -337,8 +338,7 @@ def fit_and_evaluate_best_equation(
 
         # Select the best equation based on validation loss
         best_eq = best_equation(model, X_val, y_val, loss_function, X_check)
-
-        assert best_eq is not None, "No valid equation found during fitting."
+        best_eqs.append(best_eq)
         lambda_expr = best_eq.lambda_format 
 
         # Compute losses on training, validation and test sets
@@ -346,4 +346,4 @@ def fit_and_evaluate_best_equation(
         validation_losses[interval_idx] = loss_function(y_val, lambda_expr(X_val))
         test_losses[interval_idx] = loss_function(y_test, lambda_expr(X_test))
 
-    return training_losses, validation_losses, test_losses, best_eq
+    return training_losses, validation_losses, test_losses, best_eqs
