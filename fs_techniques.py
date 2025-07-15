@@ -188,7 +188,7 @@ def cmi_feature_selection(
             y_scaled,
             X_scaled[selected_features].to_numpy().tolist() if selected_features else None,
             k=k,
-            ns=1000,
+            ns=100,
             alpha=alpha
         )
 

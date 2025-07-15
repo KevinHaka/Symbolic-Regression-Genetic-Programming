@@ -1,6 +1,6 @@
 # Libraries and modules
 import numpy as np
-import pandas as pd
+# import pandas as pd
 
 from joblib import Parallel, delayed
 from typing import Callable, Optional
@@ -8,8 +8,8 @@ from inspect import signature
 from tqdm import tqdm
 
 from pysr import PySRRegressor
-from pysr_utils import best_equation, nrmse_loss
-from pysr_utils import train_val_test_split, fit_and_evaluate_best_equation, cumulative_lambda
+from pysr_utils import nrmse_loss, cumulative_lambda
+from pysr_utils import fit_and_evaluate_best_equation
 from fs_techniques import cmi_feature_selection, shap_feature_selection
 
 def gp(
@@ -34,7 +34,7 @@ def gp(
         "test_loss": np.empty((n_runs, n_records))
     }
     features = train_val_test_sets_list[0][0].columns.tolist()
-    best_eqs = []
+    best_eqs_list = []
 
     print(f"{method_name+' ':-<20}")
 
@@ -52,14 +52,14 @@ def gp(
     )
 
     # Unpack the outputs into the respective lists
-    for run, (training_losses, validation_losses, test_losses, best_eq) in enumerate(outputs):
+    for run, (training_losses, validation_losses, test_losses, best_eqs) in enumerate(outputs):
         # Store results
         results["training_loss"][run] = training_losses
         results["validation_loss"][run] = validation_losses
         results["test_loss"][run] = test_losses
-        best_eqs.append(best_eq)
+        best_eqs_list.append(best_eqs)
 
-    return results, features, best_eqs
+    return results, features, best_eqs_list
 
 def gpshap(
     train_val_test_sets_list: tuple,
@@ -70,7 +70,7 @@ def gpshap(
 ) -> tuple[dict, list, list]:
 
     if pysr_params is None: pysr_params = {}
-    method_name = "GPSHAP"
+    method_name = "GPSHAP"  # NOTE: It's not necessary, maybe you can remove it later
 
     # Determine the total number of iterations and how many times to record losses
     niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
@@ -84,7 +84,7 @@ def gpshap(
         'validation_loss': np.zeros((n_runs, n_records)),
         'test_loss': np.zeros((n_runs, n_records))
     }
-    best_eqs = []
+    best_eqs_list = []
 
     X_train_list = [train_val_test_sets[0] for train_val_test_sets in train_val_test_sets_list]
     
@@ -121,13 +121,13 @@ def gpshap(
     )
 
     # Unpack the outputs into the respective lists
-    for run, (training_losses, validation_losses, test_losses, best_eq) in enumerate(outputs):
+    for run, (training_losses, validation_losses, test_losses, best_eqs) in enumerate(outputs):
         results["training_loss"][run] = training_losses
         results["validation_loss"][run] = validation_losses
         results["test_loss"][run] = test_losses
-        best_eqs.append(best_eq)
+        best_eqs_list.append(best_eqs)
 
-    return results, selected_features, best_eqs
+    return results, selected_features, best_eqs_list
 
 def gpcmi(
     train_val_test_sets_list: tuple,
@@ -153,7 +153,7 @@ def gpcmi(
         "test_loss": np.zeros((n_runs, n_records))
     }
     selected_features_list = []
-    best_eqs = []
+    best_eqs_list = []
 
     print(f"{method_name+" ":-<20}")
 
@@ -194,24 +194,21 @@ def gpcmi(
     )
 
     # Unpack the outputs into the respective lists
-    for run, (training_losses, validation_losses, test_losses, best_eq) in enumerate(outputs):
+    for run, (training_losses, validation_losses, test_losses, best_eqs) in enumerate(outputs):
         results["training_loss"][run] = training_losses
         results["validation_loss"][run] = validation_losses
         results["test_loss"][run] = test_losses
-        best_eqs.append(best_eq)
+        best_eqs_list.append(best_eqs)
 
-    return results, selected_features_list, best_eqs
+    return results, selected_features_list, best_eqs_list
 
 def new_method(
     method_params: dict,
     n_submodels: int = 2,
-    method_function: Callable = gp,
+    method_function: Callable = gpcmi,
 ) -> tuple[dict, list, list]:
 
-    if 'pysr_params' not in method_params:
-        niterations = signature(PySRRegressor).parameters['niterations'].default
-        method_params['pysr_params'] = {}
-    elif method_params['pysr_params'] is None:
+    if ('pysr_params' not in method_params) or (method_params['pysr_params'] is None):
         niterations = signature(PySRRegressor).parameters['niterations'].default
         method_params['pysr_params'] = {}
     else:
@@ -220,7 +217,6 @@ def new_method(
     record_interval = method_params.get("record_interval", signature(method_function).parameters['record_interval'].default)
     n_records = niterations // record_interval
     n_runs = len(method_params['train_val_test_sets_list'])
-    
 
     results = {
         "training_loss": np.zeros((n_runs, n_records)),
@@ -228,8 +224,9 @@ def new_method(
         "test_loss": np.zeros((n_runs, n_records))
     }
     selected_features_list = [[] for _ in range(n_runs)]
-    best_eqs = [[] for _ in range(n_runs)]
-    lambda_models = [[] for _ in range(n_runs)]
+    best_eqs_lists = [[] for _ in range(n_runs)]
+    lambda_models = [[[] for _ in range(n_records)] for _ in range(n_runs)]
+    lambda_exprs = [[] for _ in range(n_runs)]
 
     train_val_test_sets_list_original = method_params['train_val_test_sets_list'].copy()
 
@@ -239,35 +236,54 @@ def new_method(
 
         low = sub_i * n_records // n_submodels
         high = (sub_i + 1) * n_records // n_submodels
+        n_points = high - low
 
-        method_params['pysr_params']['niterations'] = (high - low) * record_interval
+        method_params['pysr_params']['niterations'] = n_points * record_interval
 
         # Run the method function
-        temp_results, temp_selected_features_list, temp_best_eqs = method_function(**method_params)
-
-        # Store the results in the main results dictionary
-        results["training_loss"][:, low:high] = temp_results["training_loss"]
-        results["validation_loss"][:, low:high] = temp_results["validation_loss"]
-        results["test_loss"][:, low:high] = temp_results["test_loss"]
+        _, temp_selected_features_list, temp_best_eqs_list = method_function(**method_params)
 
         for run in range(n_runs):
-            selected_features_list[run].append(temp_selected_features_list[run])
-            best_eqs[run].append(temp_best_eqs[run])
-        
-            lambda_expr = temp_best_eqs[run].lambda_format
             selected_features = temp_selected_features_list[run]
-            lambda_models[run].append((lambda_expr, selected_features))
+            interval_best_eqs = temp_best_eqs_list[run]
 
-            X_train, X_val, X_test = train_val_test_sets_list_original[run][:3]
+            selected_features_list[run].append(selected_features)
+            best_eqs_lists[run].extend(interval_best_eqs)
+            lambda_exprs[run].extend([best_eq.lambda_format for best_eq in interval_best_eqs])
+
+            X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_sets_list_original[run]
+
+            for interval_idx in range(low, high):
+                lambda_models[run][interval_idx].append((lambda_exprs[run][interval_idx], selected_features))
+
+                # Compute cumulative predictions from current submodels
+                train_cumulative_pred = cumulative_lambda(X_train, lambda_models[run][interval_idx])
+                val_cumulative_pred = cumulative_lambda(X_val, lambda_models[run][interval_idx])
+                test_cumulative_pred = cumulative_lambda(X_test, lambda_models[run][interval_idx])
+
+                # Compute losses for cumulative predictions
+                results["training_loss"][run, interval_idx] = method_params['loss_function'](
+                    y_train, train_cumulative_pred
+                )
+                results["validation_loss"][run, interval_idx] = method_params['loss_function'](
+                    y_val, val_cumulative_pred
+                )
+                results["test_loss"][run, interval_idx] = method_params['loss_function'](
+                    y_test, test_cumulative_pred
+                )
+            
+            for interval_idx in range(high+1, n_records):
+                lambda_models[run][interval_idx].append((lambda_exprs[run][high-1], selected_features))
+
             X_train_curr = X_train[selected_features]
             X_val_curr = X_val[selected_features]
             X_test_curr = X_test[selected_features]
 
             y_train_residual, y_val_residual, y_test_residual = method_params['train_val_test_sets_list'][run][3:]
 
-            y_train_residual -= lambda_expr(X_train_curr)
-            y_val_residual -= lambda_expr(X_val_curr)
-            y_test_residual -= lambda_expr(X_test_curr)
+            y_train_residual -= lambda_exprs[run][-1](X_train_curr)
+            y_val_residual -= lambda_exprs[run][-1](X_val_curr)
+            y_test_residual -= lambda_exprs[run][-1](X_test_curr)
 
             method_params['train_val_test_sets_list'][run] = (
                 X_train, 
@@ -278,9 +294,4 @@ def new_method(
                 y_test_residual
             )
 
-            # Compute cumulative predictions from current submodels
-            # train_cumulative_pred = cumulative_lambda(X_train, lambda_models[run])
-            # val_cumulative_pred = cumulative_lambda(X_val, lambda_models[run])
-            # test_cumulative_pred = cumulative_lambda(X_test, lambda_models[run])
-    
-    return results, selected_features_list, best_eqs
+    return results, selected_features_list, best_eqs_lists
