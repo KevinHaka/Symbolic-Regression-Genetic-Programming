@@ -2,16 +2,17 @@ from typing import Callable, Tuple, Dict, List, Any
 from abc import ABC, abstractmethod
 from inspect import signature
 
-import numpy as np
 from pandas import DataFrame, Series
+from numpy import ndarray
 
+from pysr import PySRRegressor
 
 class BaseMethod(ABC):
     """Abstract interface for a symbolic-regression method."""
 
     def __init__(
         self,
-        loss_function: Callable[[np.ndarray, np.ndarray], float],
+        loss_function: Callable[[ndarray, ndarray], float],
         record_interval: int,
         pysr_params: Dict[str, Any],
     ) -> None:
@@ -43,17 +44,21 @@ class BaseMethod(ABC):
             Series      # y_test
         ],
     ) -> Tuple[
-        Dict[str, List[float]],  # loss histories
-        List[str],               # feature names
-        List[Series]             # best-equation objects
+        ndarray,               # training losses
+        ndarray,               # validation losses
+        ndarray,               # test losses
+        List[Series],          # best-equation objects
+        List[str],            # feature names
     ]:
         """
         Execute one full train/validation/test run.
 
         Returns:
             A tuple of:
-            - dict with keys 'training_loss','validation_loss','test_loss'
-            - list of feature names
-            - list of best-equations captured at each record interval
+            - ndarray with training losses
+            - ndarray with validation losses
+            - ndarray with test losses
+            - list of best-equation objects captured at each record interval
+            - list of feature names used in the model
         """
         raise NotImplementedError

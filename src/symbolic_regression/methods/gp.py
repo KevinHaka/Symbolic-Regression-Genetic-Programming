@@ -1,19 +1,17 @@
-# from symbolic_regression.methods.base import BaseMethod
-from base import BaseMethod
+from sympy import re
+from .base import BaseMethod
 from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
 
-import numpy as np
 from pandas import DataFrame, Series
+from numpy import ndarray
 
 from pysr import PySRRegressor
-from typing import Any, Callable, Tuple, Dict
-
-
+from typing import Any, Callable, List, Tuple, Dict
 
 class GP(BaseMethod):
     def __init__(
         self,
-        loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
+        loss_function: Callable[[ndarray, ndarray], float] = nrmse_loss,
         record_interval: int = 1,
         pysr_params: Dict[str, Any] = {}
     ):
@@ -40,15 +38,17 @@ class GP(BaseMethod):
             DataFrame,  # X_train
             DataFrame,  # X_val
             DataFrame,  # X_test
-            Series,     # y_train
-            Series,     # y_val
-            Series      # y_test
+            ndarray,    # y_train
+            ndarray,    # y_val
+            ndarray     # y_test
         ],
     ) -> Tuple[
-            Dict[str, list],  # loss histories
-            list[str],        # feature names
-            list[Series]      # best-equation objects
-        ]:
+        ndarray,               # training losses
+        ndarray,               # validation losses
+        ndarray,               # test losses
+        List[Series],          # best-equation objects
+        List[str],             # feature names
+    ]:
         """
         Execute one full train/validation/test run using GP.
         """
@@ -62,10 +62,4 @@ class GP(BaseMethod):
             self.pysr_params
         )
 
-        results = {
-            "training_loss": training_losses,
-            "validation_loss": validation_losses,
-            "test_loss": test_losses
-        }
-
-        return results, features, best_eqs
+        return training_losses, validation_losses, test_losses, best_eqs, features
