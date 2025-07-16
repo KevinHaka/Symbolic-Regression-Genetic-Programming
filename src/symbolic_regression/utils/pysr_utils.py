@@ -57,7 +57,7 @@ def nrmse_loss(
 def best_equation(
     model: PySRRegressor, 
     X: pd.DataFrame,
-    y: pd.Series,
+    y: np.ndarray,
     loss_function: Callable[[np.ndarray, np.ndarray], float],
     X_check: Optional[pd.DataFrame] = None
 ) -> pd.Series:
@@ -80,7 +80,7 @@ def best_equation(
 
     Returns
     -------
-    best_eq : pandas.Series or None
+    best_eq : pandas.Series
         The equation (row from model.equations_) with the lowest loss.
     """
 
@@ -89,7 +89,6 @@ def best_equation(
 
     n_equations = len(model.equations_)
     temp_loss = np.inf
-    best_eq = None 
 
     # Iterate over all equations and find the one with the lowest loss
     for idx in range(n_equations):
@@ -272,9 +271,9 @@ def fit_and_evaluate_best_equation(
         pd.DataFrame, # X_train
         pd.DataFrame, # X_val
         pd.DataFrame, # X_test
-        pd.Series,   # y_train
-        pd.Series,   # y_val
-        pd.Series    # y_test
+        np.ndarray,   # y_train
+        np.ndarray,   # y_val
+        np.ndarray    # y_test
     ],
     loss_function: Callable,
     record_interval: int = 1,
