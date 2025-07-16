@@ -1,6 +1,8 @@
 # Folder to ignore
 outputs/
 __pycache__/
+*.egg-info/
 
 # Files to ignore
 *.pickle
+*.pkl
