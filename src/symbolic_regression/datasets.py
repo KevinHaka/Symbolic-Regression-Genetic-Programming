@@ -2,14 +2,14 @@
 import pandas as pd
 import numpy as np
 
-from typing import List, Union, Tuple, Dict
+from typing import Sequence, Union, Tuple, Dict
 
 from pmlb import fetch_data
 from ucimlrepo import fetch_ucirepo 
 
 # Custom dataset loading functions
 def load_datasets(
-    dataset_names: List[Union[str, Tuple[str, str]]]
+    dataset_names: Sequence[Union[str, Tuple[str, str]]]
 ) -> Dict[str, dict]:
     """
     Load multiple datasets by name, with optional renaming.
@@ -102,7 +102,8 @@ def _4544_geographical_original_of_music(
     
     # Fetch the dataset from PMLB
     dataset = fetch_data("4544_GeographicalOriginalofMusic")
-    
+    assert type(dataset) is pd.DataFrame, "Expected dataset to be a pandas DataFrame"
+
     # Separate features and target
     X = dataset.drop(columns="target")
     y = dataset['target'].to_numpy()
@@ -125,6 +126,7 @@ def _505_tecator(
     
     # Fetch the dataset from PMLB
     dataset = fetch_data("505_tecator")
+    assert type(dataset) is pd.DataFrame, "Expected dataset to be a pandas DataFrame"
     
     # Separate features and target
     X = dataset.drop(columns="target")
