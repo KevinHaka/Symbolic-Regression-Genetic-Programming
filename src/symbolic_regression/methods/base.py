@@ -1,9 +1,9 @@
-from typing import Callable, Tuple, Dict, List, Any
-from abc import ABC, abstractmethod
-from inspect import signature
+import numpy as np
+import pandas as pd
 
-from pandas import DataFrame, Series
-from numpy import ndarray
+from inspect import signature
+from abc import ABC, abstractmethod
+from typing import Callable, Tuple, Dict, List, Any
 
 from pysr import PySRRegressor
 
@@ -12,7 +12,7 @@ class BaseMethod(ABC):
 
     def __init__(
         self,
-        loss_function: Callable[[ndarray, ndarray], float],
+        loss_function: Callable[[np.ndarray, np.ndarray], float],
         record_interval: int,
         pysr_params: Dict[str, Any],
     ) -> None:
@@ -33,32 +33,13 @@ class BaseMethod(ABC):
         self.n_records = self.niterations // self.record_interval
 
     @abstractmethod
-    def run(
-        self,
-        data_split: Tuple[
-            DataFrame,  # X_train
-            DataFrame,  # X_val
-            DataFrame,  # X_test
-            Series,     # y_train
-            Series,     # y_val
-            Series      # y_test
-        ],
-    ) -> Tuple[
-        ndarray,               # training losses
-        ndarray,               # validation losses
-        ndarray,               # test losses
-        List[Series],          # best-equation objects
-        List[str],            # feature names
+    def run(self, *args, **kwargs) -> Tuple[
+        Tuple[np.ndarray, np.ndarray, np.ndarray],  # training, validation, test losses
+        List[pd.Series],                            # best-equation objects
+        List[str],                                  # feature names
     ]:
         """
-        Execute one full train/validation/test run.
-
-        Returns:
-            A tuple of:
-            - ndarray with training losses
-            - ndarray with validation losses
-            - ndarray with test losses
-            - list of best-equation objects captured at each record interval
-            - list of feature names used in the model
+        Run the symbolic regression method.
         """
+
         raise NotImplementedError
