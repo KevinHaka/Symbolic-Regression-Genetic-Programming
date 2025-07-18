@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
 
-from typing import Any, Callable, List, Tuple, Dict
+from typing import Any, Callable, List, Optional, Tuple, Dict
 
 from .base import BaseMethod
 from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
+from ..feature_selections.shap import select_features as shap_sf
+from ..feature_selections.shap import select_features_from_pretrained_models as shap_pretrained_sf
 
 class GPSHAP(BaseMethod):
     def __init__(
@@ -34,7 +36,64 @@ class GPSHAP(BaseMethod):
         """
 
         super().__init__(loss_function, record_interval, pysr_params)
+        self._feature_cache = {}
 
+    @staticmethod
+    def _get_dataset_key(X):
+        return hash(f"{X.shape}_{list(X.columns)}")
+    
+    def precompute_features(
+        self, 
+        X: pd.DataFrame, 
+        y: np.ndarray,
+        **shap_params
+    ) -> List[str]:
+        """
+        Precompute and cache the selected features using SHAP.
+        
+        Args:
+            X (pd.DataFrame): Feature DataFrame.
+            y (np.ndarray): Target variable.
+            shap_params (dict): Additional parameters for SHAP feature selection.
+        
+        Returns:
+            List[str]: List of selected feature names.
+        """
+
+        dataset_key = self._get_dataset_key(X)
+
+        if dataset_key not in self._feature_cache:
+            selected_features, _ = shap_sf(X, y, **shap_params)
+            self._feature_cache[dataset_key] = selected_features
+
+        return self._feature_cache[dataset_key]
+
+    def precompute_features_from_pretrained_models(
+        self,
+        X_trains: Tuple[pd.DataFrame],
+        gp_equations: List[pd.Series],
+        n_top_features: Optional[int] = None
+    ) -> List[str]:
+        """
+        Precompute and cache the selected features from pretrained GP models.
+
+        Args:
+            X_trains (Tuple[pd.DataFrame]): Tuple of training DataFrames.
+            gp_equations (List[pd.Series]): List of GP equations.
+            n_top_features (Optional[int]): Number of top features to select.
+
+        Returns:
+            List[str]: List of selected feature names.
+        """
+
+        dataset_key = self._get_dataset_key(X_trains)
+
+        if dataset_key not in self._feature_cache:
+            selected_features, _ = shap_pretrained_sf(X_trains, gp_equations, n_top_features)
+            self._feature_cache[dataset_key] = selected_features
+
+        return self._feature_cache[dataset_key]
+        
     def run(
         self,
         train_val_test_set: Tuple[
@@ -44,8 +103,7 @@ class GPSHAP(BaseMethod):
             np.ndarray,    # y_train
             np.ndarray,    # y_val
             np.ndarray     # y_test
-        ],
-        selected_features: List[str],
+        ]
     ) -> Tuple[
         Tuple[np.ndarray, np.ndarray, np.ndarray],  # training, validation, test losses
         List[pd.Series],                            # best-equation objects
@@ -54,6 +112,15 @@ class GPSHAP(BaseMethod):
         """ Execute one full train/validation/test run using GP and SHAP."""
 
         X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_set
+
+        # Get a unique key for the dataset to cache features
+        dataset_key = self._get_dataset_key(X_train)
+
+        if dataset_key not in self._feature_cache:
+            selected_features, _ = shap_sf(X_train, y_train)
+            self._feature_cache[dataset_key] = selected_features
+
+        selected_features = self._feature_cache[dataset_key]
 
         # Create a new data split with only the selected features
         train_val_test_set_filtered = (

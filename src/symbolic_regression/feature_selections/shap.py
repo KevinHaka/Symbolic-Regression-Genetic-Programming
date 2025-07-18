@@ -98,14 +98,14 @@ def select_features(
         X_trains.append(train_val_test_set[0])
         gp_equations.append(temp_best_eqs[-1])
 
-    selected_features, mean_shap_values_selected_features = select_from_pretrained_models(
+    selected_features, mean_shap_values_selected_features = select_features_from_pretrained_models(
         X_trains=tuple(X_trains),
         gp_equations=gp_equations,
         n_top_features=n_top_features
     )
     return selected_features, mean_shap_values_selected_features
 
-def select_from_pretrained_models(
+def select_features_from_pretrained_models(
     X_trains: Tuple[pd.DataFrame],
     gp_equations: List[pd.Series],
     n_top_features: Optional[int] = None
