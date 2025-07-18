@@ -4,7 +4,7 @@ import pandas as pd
 from sympy import lambdify
 from shap import SamplingExplainer, utils
 
-from typing import Callable, Dict, Optional, List, Tuple
+from typing import Callable, Optional, List, Tuple
 
 from symbolic_regression.methods.gp import GP
 from symbolic_regression.utils.pysr_utils import train_val_test_split
@@ -70,7 +70,7 @@ def select_features(
     val_size: float = 0.25,
     n_runs: int = 30,
     n_top_features: Optional[int] = None,
-    gp_params: Dict = {},
+    **gp_params
 ) -> Tuple[List[str], List[float]]:
     
     gp = GP(**gp_params)
@@ -135,9 +135,13 @@ def select_features_from_pretrained_models(
     for gp_equation, X_train in zip(gp_equations, X_trains):
         str_variables, feature_shap_values = _get_shap_values(X_train, gp_equation)
 
-        # Aggregate SHAP values across equations (normalize by number of equations)
+        # Aggregate SHAP values across equations (accumulate absolute values)
         for feature_shap_value, var_name in zip(feature_shap_values, str_variables):
-            mean_shap_values[var_name] = mean_shap_values.get(var_name, 0) + feature_shap_value/n_equations
+            mean_shap_values[var_name] = mean_shap_values.get(var_name, 0) + abs(feature_shap_value)
+
+    # Normalize by number of equations after aggregation
+    for var_name in mean_shap_values:
+        mean_shap_values[var_name] /= n_equations
 
     # Select top features by mean SHAP value
     selected_features = sorted(list(mean_shap_values.keys()), key=lambda k: mean_shap_values[k], reverse=True)[:n_top_features]
