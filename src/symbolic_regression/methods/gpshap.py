@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from typing import Any, Callable, List, Optional, Tuple, Dict
+from typing import Callable, List, Optional, Tuple
 
 from .base import BaseMethod
 from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
@@ -13,7 +13,7 @@ class GPSHAP(BaseMethod):
         self,
         loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
         record_interval: int = 1,
-        pysr_params: Dict[str, Any] = {},
+        **pysr_params
     ):
         """
         Initialize the GPSHAP method.
@@ -35,12 +35,12 @@ class GPSHAP(BaseMethod):
             log2(number of features).
         """
 
-        super().__init__(loss_function, record_interval, pysr_params)
+        super().__init__(loss_function, record_interval, **pysr_params)
         self._feature_cache = {}
 
     @staticmethod
-    def _get_dataset_key(X):
-        return hash(f"{X.shape}_{list(X.columns)}")
+    def _get_dataset_key(X: pd.DataFrame) -> int:
+        return hash(tuple(X.columns))
     
     def precompute_features(
         self, 
@@ -86,7 +86,7 @@ class GPSHAP(BaseMethod):
             List[str]: List of selected feature names.
         """
 
-        dataset_key = self._get_dataset_key(X_trains)
+        dataset_key = self._get_dataset_key(X_trains[0])
 
         if dataset_key not in self._feature_cache:
             selected_features, _ = shap_pretrained_sf(X_trains, gp_equations, n_top_features)

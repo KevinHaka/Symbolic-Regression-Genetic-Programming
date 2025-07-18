@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from typing import Callable, Any, Dict, Tuple, List
+from typing import Callable, Tuple, List
 
 from .base import BaseMethod
 from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
@@ -14,7 +14,7 @@ class GPCMI(BaseMethod):
         record_interval: int = 1,
         k: int = 5,
         ci: float = 0.99,
-        pysr_params: Dict[str, Any] = {},
+        **pysr_params
     ) -> None:
         """
         Initialize the GPCMI method.
@@ -27,7 +27,7 @@ class GPCMI(BaseMethod):
             pysr_params (Dict[str, Any]): Parameters for PySR.
         """
 
-        super().__init__(loss_function, record_interval, pysr_params)
+        super().__init__(loss_function, record_interval, **pysr_params)
         self.k = k
         self.ci = ci
 

@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from typing import Any, Callable, List, Tuple, Dict
+from typing import Callable, List, Tuple
 
 from .base import BaseMethod
 from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
@@ -11,7 +11,7 @@ class GP(BaseMethod):
         self,
         loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
         record_interval: int = 1,
-        pysr_params: Dict[str, Any] = {}
+        **pysr_params
     ) -> None:
         """
         Initialize the GP method with loss function, record interval, and PySR parameters.
@@ -25,8 +25,8 @@ class GP(BaseMethod):
         pysr_params : Dict
             Parameters for PySRRegressor.
         """
-        
-        super().__init__(loss_function, record_interval, pysr_params)
+
+        super().__init__(loss_function, record_interval, **pysr_params)
 
     def run(
         self,
