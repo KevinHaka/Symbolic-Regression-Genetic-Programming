@@ -1,11 +1,10 @@
-from .base import BaseMethod
-from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
-
 import pandas as pd
 import numpy as np
 
-from pysr import PySRRegressor
 from typing import Any, Callable, List, Tuple, Dict
+
+from .base import BaseMethod
+from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
 
 class GP(BaseMethod):
     def __init__(
