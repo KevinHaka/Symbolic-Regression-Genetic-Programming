@@ -86,6 +86,9 @@ class GPSHAP(BaseMethod):
             List[str]: List of selected feature names.
         """
 
+        if not X_trains:
+            raise ValueError("X_trains is empty. Cannot select features from an empty tuple.")
+
         dataset_key = self._get_dataset_key(X_trains[0])
 
         if dataset_key not in self._feature_cache:
