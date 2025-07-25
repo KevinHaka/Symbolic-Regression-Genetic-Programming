@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from multiprocessing import Manager
 from typing import Callable, List, Optional, Tuple
 
 from .base import BaseMethod
@@ -36,7 +37,11 @@ class GPSHAP(BaseMethod):
         """
 
         super().__init__(loss_function, record_interval, **pysr_params)
-        self._feature_cache = {}
+        self._feature_cache = Manager().dict()
+
+    def clear_cache(self):
+        """Clear the feature cache."""
+        self._feature_cache.clear()
 
     @staticmethod
     def _get_dataset_key(X: pd.DataFrame) -> int:
@@ -120,8 +125,10 @@ class GPSHAP(BaseMethod):
         dataset_key = self._get_dataset_key(X_train)
 
         if dataset_key not in self._feature_cache:
-            selected_features, _ = shap_sf(X_train, y_train)
-            self._feature_cache[dataset_key] = selected_features
+            raise ValueError(
+                f"Features for dataset with key {dataset_key} have not been precomputed. "
+                "Please call precompute_features or precompute_features_from_pretrained_models first."
+            )
 
         selected_features = self._feature_cache[dataset_key]
 
