@@ -98,9 +98,10 @@ def best_equation(
         # Update best equation if current one has lower loss
         if loss < temp_loss:
 
-            # Ensure the equation produces real values
+            # Ensure the equation produces valid values
             y_check_pred = model.predict(X_check, idx)
-            if np.iscomplexobj(y_check_pred): continue
+            if np.any(np.isnan(y_check_pred)) or np.any(np.isinf(y_check_pred)) or not np.all(np.isreal(y_check_pred)): 
+                continue
 
             temp_loss = loss
             best_eq = model.equations_.iloc[idx]
