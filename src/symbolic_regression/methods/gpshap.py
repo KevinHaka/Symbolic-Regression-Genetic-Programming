@@ -31,9 +31,6 @@ class GPSHAP(BaseMethod):
             Interval at which to record statistics.
         pysr_params : Dict
             Parameters for PySRRegressor.
-        n_top_features : int, optional
-            Number of top features to select using SHAP. If None, it defaults to
-            log2(number of features).
         """
 
         super().__init__(loss_function, record_interval, **pysr_params)
@@ -125,12 +122,13 @@ class GPSHAP(BaseMethod):
         dataset_key = self._get_dataset_key(X_train)
 
         if dataset_key not in self._feature_cache:
-            raise ValueError(
-                f"Features for dataset with key {dataset_key} have not been precomputed. "
-                "Please call precompute_features or precompute_features_from_pretrained_models first."
-            )
+            X = pd.concat([X_train, X_val, X_test], ignore_index=True)
+            y = np.concatenate([y_train, y_val, y_test])
+            selected_features = self.precompute_features(X, y, **self.pysr_params)
+            self._feature_cache[dataset_key] = selected_features
 
-        selected_features = self._feature_cache[dataset_key]
+        else:
+            selected_features = self._feature_cache[dataset_key]
 
         # Create a new data split with only the selected features
         train_val_test_set_filtered = (
