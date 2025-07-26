@@ -5,6 +5,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from pysr import PySRRegressor
 
+from ..methods.base import BaseMethod
+
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
@@ -354,3 +356,60 @@ def fit_and_evaluate_best_equation(
         test_losses[interval_idx] = loss_function(y_test, lambda_expr(X_test))
 
     return training_losses, validation_losses, test_losses, best_eqs
+
+def process_task(
+    dataset_name: str, 
+    method_name: str, 
+    run: int, 
+    train_val_test_set: Tuple, 
+    method: BaseMethod, 
+    _: Any,
+) -> Dict[str, Any]:
+    """
+    Executes a single run of a symbolic regression method on a given dataset.
+
+    This function serves as a wrapper to call the `run` method of a specific
+    symbolic regression approach (`BaseMethod`) and formats the output into a
+    dictionary for later aggregation and analysis.
+
+    Parameters
+    ----------
+    dataset_name : str
+        The name of the dataset being processed.
+    method_name : str
+        The name of the symbolic regression method being used.
+    run : int
+        The current run number (e.g., for repeated experiments).
+    train_val_test_set : Tuple
+        A tuple containing the training, validation, and test data splits.
+        Expected format: (X_train, X_val, X_test, y_train, y_val, y_test).
+    method : BaseMethod
+        An instance of a class that inherits from `BaseMethod` and implements
+        the `run` method.
+    _ : Any
+        Typically used for compatibility with Dask's delayed execution.
+
+    Returns
+    -------
+    Dict[str, Any]
+        A dictionary containing the results of the run, including:
+        - 'dataset_name': Name of the dataset.
+        - 'method_name': Name of the method.
+        - 'run': The run number.
+        - 'losses': The losses recorded during the run.
+        - 'equations': The best equations found.
+        - 'features': The features used by the equations.
+    """
+
+    # Run the symbolic regression method and get the results
+    temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set)
+
+    # Organize the results into a dictionary
+    return {
+        'dataset_name': dataset_name,
+        'method_name': method_name,
+        'run': run,
+        'losses': temp_losses,
+        'equations': temp_best_eqs,
+        'features': temp_features
+    }
