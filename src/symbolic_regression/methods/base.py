@@ -29,8 +29,8 @@ class BaseMethod(ABC):
         self.record_interval = record_interval
         self.pysr_params = pysr_params
 
-        self.niterations = self.pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
-        self.n_records = self.niterations // self.record_interval
+        niterations = self.pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
+        self.n_records = niterations // self.record_interval
 
     @abstractmethod
     def run(self, *args, **kwargs) -> Tuple[
