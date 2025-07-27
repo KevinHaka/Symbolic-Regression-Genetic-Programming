@@ -363,7 +363,7 @@ def process_task(
     run: int, 
     train_val_test_set: Tuple, 
     method: BaseMethod, 
-    _: Any,
+    _: Any = None,
 ) -> Dict[str, Any]:
     """
     Executes a single run of a symbolic regression method on a given dataset.
@@ -386,7 +386,7 @@ def process_task(
     method : BaseMethod
         An instance of a class that inherits from `BaseMethod` and implements
         the `run` method.
-    _ : Any
+    _ : Any, optional
         Typically used for compatibility with Dask's delayed execution.
 
     Returns
