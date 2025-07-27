@@ -94,7 +94,7 @@ class RFGP(BaseMethod):
             if n_records_for_this_submodel == 0: continue
 
             # Update the number of iterations for the submodel
-            method.niterations = n_records_for_this_submodel * self.record_interval
+            method.pysr_params['niterations'] = n_records_for_this_submodel * self.record_interval
 
             # Prepare data for the current sub-model
             current_train_val_test_set = (
