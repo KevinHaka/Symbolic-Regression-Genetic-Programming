@@ -8,8 +8,9 @@ from typing import List, Tuple
 def select_features(
     X: pd.DataFrame,
     y: np.ndarray,
-    k: int = 5,
-    ci: float = 0.99
+    ns: int = 1000,
+    ci: float = 0.99,
+    k: int = 5
 ) -> Tuple[List[str], List[float]]:
     
     # Initialize algorithm state
@@ -44,11 +45,11 @@ def select_features(
         max_cmi_value = cmi_per_feature[max_cmi_feature]
 
         _, (lower_bound, upper_bound) = ee.shuffle_test(
-            ee.mi,
-            X_scaled[feature], 
-            y_scaled,
-            X_scaled[selected_features].to_numpy().tolist() if selected_features else None, # type: ignore
-            ns=100,
+            measure=ee.mi,
+            x=X_scaled[feature],
+            y=y_scaled,
+            z=X_scaled[selected_features].to_numpy().tolist() if selected_features else None,  # type: ignore
+            ns=ns,
             ci=ci,
             k=k
         )
