@@ -37,15 +37,16 @@ def main():
     test_size = 0.2
     val_size = 0.25
     n_top_features = None
-    k = 5
+    ns = 100
     ci = 0.99
+    k = 5
     record_interval = 5
     n_submodels = 2
 
     pysr_params = {
         "populations": 1,
         "population_size": 20,
-        "niterations": 50,
+        "niterations": 20,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {"inv": lambda x: 1/x},
@@ -73,8 +74,9 @@ def main():
     }
 
     gpcmi_params = {
-        "k": k,
+        "ns": ns,
         "ci": ci,
+        "k": k,
         **gp_params
     }
 
@@ -98,8 +100,8 @@ def main():
     rfgpcmi = RFGP(**rfgpcmi_params)
 
     methods = {
-        "GP": gp,
-        "GPSHAP": gpshap,
+        # "GP": gp,
+        # "GPSHAP": gpshap,
         "GPCMI": gpcmi,
         "RFGPCMI": rfgpcmi,
     }
@@ -205,10 +207,12 @@ def main():
     print(f"\nResults saved to {filename}")
 
 if __name__ == '__main__':
-    # Pre-compile PySR to avoid race conditions in parallel execution
-    print("Initializing PySR... (This may take a moment)")
-    from pysr import PySRRegressor
-    PySRRegressor(niterations=1, populations=1)
-    print("PySR initialized.")
+    import time
+    start_time = time.time()
 
     main()
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Total elapsed time: {elapsed_time:.2f} seconds")
+    
