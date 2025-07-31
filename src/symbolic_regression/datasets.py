@@ -48,8 +48,8 @@ def load_datasets(
     
     # Define UCI ML Repository datasets with their loading functions
     uci_dataset_names = {
-        "Communities and Crime": communities_and_crime,
-        "Communities and Crime Unnormalized": communities_and_crime_unnormalized,
+        "Communities and Crime": _communities_and_crime,
+        "Communities and Crime Unnormalized": _communities_and_crime_unnormalized,
     }
 
     # Process each requested dataset
@@ -135,7 +135,7 @@ def _505_tecator(
     return X, y
 
 # Functions to load specific datasets from UCI ML repository
-def communities_and_crime(
+def _communities_and_crime(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """ 
     Load the Communities and Crime dataset from UCI ML repository.
@@ -175,7 +175,7 @@ def communities_and_crime(
     
     return X, y
 
-def communities_and_crime_unnormalized(
+def _communities_and_crime_unnormalized(
     target: str = 'violentPerPop'
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
