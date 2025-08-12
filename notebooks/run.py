@@ -2,8 +2,12 @@ import numpy as np
 import pickle
 import datetime
 import warnings
+import time
+import gc
 
 
+# NOTE: This script assumes that the NPEET repository is cloned in the same directory as this script.
+# I should have try to fix that by creating a virtual environment and installing NPEET as a package.
 import sys
 import os
 
@@ -26,27 +30,45 @@ from symbolic_regression.methods.gpshap import GPSHAP
 from symbolic_regression.methods.gpcmi import GPCMI
 from symbolic_regression.methods.rfgp import RFGP
 
-from symbolic_regression.utils.pysr_utils import nrmse_loss, train_val_test_split, process_task
+from symbolic_regression.utils.pysr_utils import nrmse_loss, train_val_test_split, process_task, send_email
 from symbolic_regression.datasets import load_datasets
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pysr")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-def main():
-    n_runs = 4
+def main(): 
+    # Pre-warm PySR/Julia before starting parallel processes
+    # This forces Julia to compile everything needed in the main process
+    # before Dask workers are spawned, preventing race conditions.
+    print("Pre-warming PySR/Julia environment...")
+    from pysr import PySRRegressor
+    import numpy as np
+    X_warmup = np.random.rand(10, 2)
+    y_warmup = np.random.rand(10)
+    model = PySRRegressor(
+        niterations=1,
+        populations=2,
+        population_size=20,
+        binary_operators=["+"],
+        verbosity=0,
+    )
+    model.fit(X_warmup, y_warmup)
+    print("Pre-warming complete.")
+
+    n_runs = 100
     test_size = 0.2
     val_size = 0.25
     n_top_features = None
     ns = 100
-    ci = 0.99
+    ci = 0.999
     k = 5
-    record_interval = 5
+    record_interval = 10
     n_submodels = 2
 
     pysr_params = {
-        "populations": 1,
-        "population_size": 20,
-        "niterations": 20,
+        "populations": 5,
+        "population_size": 50,
+        "niterations": 100,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {"inv": lambda x: 1/x},
@@ -56,10 +78,10 @@ def main():
     dataset_names = [
         "F1",
         # "F2",
-        # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
+        ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         # "505_tecator",
         # ("Communities and Crime", "CCN"),
-        # ("Communities and Crime Unnormalized", "CCUN"),
+        ("Communities and Crime Unnormalized", "CCUN"),
     ]
     datasets = load_datasets(dataset_names)
 
@@ -106,11 +128,7 @@ def main():
         "RFGPCMI": rfgpcmi,
     }
 
-    width_method = max([round(len(name), 0) for name in methods.keys()])
-    width_dataset = max([round(len(name), 0) for name in datasets.keys()])
     n_records = methods[list(methods.keys())[0]].n_records
-
-    # NOTE: The following code is for parallel processing of tasks across datasets and methods.
 
     delayed_tasks = {}
     if "GPSHAP" in methods:
@@ -161,7 +179,7 @@ def main():
         for task_list in methods_dict.values() 
         for task in task_list
     ]
-
+	
     with ProgressBar():
         computed_results = compute(*tasks_to_run, scheduler='processes')
 
@@ -206,13 +224,38 @@ def main():
         pickle.dump(data, f)
     print(f"\nResults saved to {filename}")
 
+    # Explicitly free up memory
+    print("Clearing memory...")
+    del computed_results
+    del results
+    del equations
+    del features
+    del data
+    gc.collect()
+    print("Memory cleared.")
+
+
 if __name__ == '__main__':
-    import time
     start_time = time.time()
-
     main()
-
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(f"Total elapsed time: {elapsed_time:.2f} seconds")
+
+    # Format the elapsed time as H:MM:SS
+    td_str = str(datetime.timedelta(seconds=elapsed_time))
+    # Split to remove microseconds
+    time_parts = td_str.split('.')
+
+    message = f"Script finished running in {time_parts[0]} seconds."
+    print(message)
+
+    send_email(
+        subject="Script Finished Running",
+        body_message=message,
+        sender_email="kevinhaka98@gmail.com",
+        app_password="higx cunc swrs tiyr",
+        smtp_server="smtp.gmail.com",
+        smtp_port=465,
+    )
+
     
