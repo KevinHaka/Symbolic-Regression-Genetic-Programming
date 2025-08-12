@@ -6,9 +6,3 @@ __pycache__/
 # Files to ignore
 *.pickle
 *.pkl
-
-
-testing_methods.ipynb
-sr_gp_methods.py
-fs_techniques.py
-NPEET/
