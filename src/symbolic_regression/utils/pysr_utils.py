@@ -13,6 +13,8 @@ from matplotlib.figure import Figure
 
 from typing import Optional, Callable, Dict, List, Tuple, Any
 from inspect import signature
+import smtplib
+from email.message import EmailMessage
 
 def rmse_loss(
     y_true: np.ndarray, 
@@ -145,7 +147,7 @@ def plot_results(
     ncols: Optional[int] = None,
     group_level: str = "dataset",
     value_level: str = "metric",
-    value_key: str = "test_loss"
+    value_key: str = "test_losses"
 ) -> tuple[Figure, np.ndarray]:
     """
     Plots boxenplots for a given pandas DataFrame with MultiIndex columns.
@@ -355,6 +357,13 @@ def fit_and_evaluate_best_equation(
         validation_losses[interval_idx] = loss_function(y_val, lambda_expr(X_val))
         test_losses[interval_idx] = loss_function(y_test, lambda_expr(X_test))
 
+        # NOTE: Under testing lines
+        X_ = pd.concat([X_train, X_val], ignore_index=True)
+        y_ = np.concatenate([y_train, y_val], axis=0)
+    
+        a = len(X_val)/(len(X_train)+ len(X_val))
+        X_train, X_val, y_train, y_val = train_test_split(X_, y_, test_size=a)
+
     return training_losses, validation_losses, test_losses, best_eqs
 
 def process_task(
@@ -413,3 +422,23 @@ def process_task(
         'equations': temp_best_eqs,
         'features': temp_features
     }
+
+def send_email(subject, body_message, sender_email, app_password, smtp_server, smtp_port, receiver_email=None):
+    if receiver_email is None:
+        receiver_email = sender_email
+
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = sender_email
+    msg['To'] = receiver_email
+    msg.set_content(body_message)
+
+    try:
+        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+            # Connect to the SMTP server and send the email
+            server.login(sender_email, app_password)
+            server.send_message(msg)
+            print("The notification email has been sent successfully!")
+            
+    except Exception as e:
+        print(f"Failed to send email: {e}")
