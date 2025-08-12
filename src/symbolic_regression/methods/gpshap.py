@@ -68,7 +68,7 @@ class GPSHAP(BaseMethod):
             selected_features, _ = shap_sf(X, y, **shap_params)
             self._feature_cache[dataset_key] = selected_features
 
-        return self._feature_cache[dataset_key]
+        return selected_features
 
     def precompute_features_from_pretrained_models(
         self,
@@ -88,16 +88,13 @@ class GPSHAP(BaseMethod):
             List[str]: List of selected feature names.
         """
 
-        if not X_trains:
-            raise ValueError("X_trains is empty. Cannot select features from an empty tuple.")
-
         dataset_key = self._get_dataset_key(X_trains[0])
 
         if dataset_key not in self._feature_cache:
             selected_features, _ = shap_pretrained_sf(X_trains, gp_equations, n_top_features)
             self._feature_cache[dataset_key] = selected_features
 
-        return self._feature_cache[dataset_key]
+        return selected_features
         
     def run(
         self,
