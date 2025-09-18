@@ -72,7 +72,7 @@ def select_features(
     n_top_features: Optional[int] = None,
     **gp_params
 ) -> Tuple[List[str], List[float]]:
-    
+
     gp = GP(**gp_params)
     X_trains = []
     gp_equations = []

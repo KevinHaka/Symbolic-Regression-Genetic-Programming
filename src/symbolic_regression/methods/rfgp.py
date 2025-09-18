@@ -16,7 +16,7 @@ class RFGP(BaseMethod):
         method_params: Optional[Dict[str, Any]] = None
     ) -> None:
         """
-        Initialize the Residual Fitting GP (RFGP) method.
+        Initialize the Residual Fitting Genetic Programming (RFGP) method.
 
         Args:
             n_submodels (int): Number of submodels to fit sequentially.

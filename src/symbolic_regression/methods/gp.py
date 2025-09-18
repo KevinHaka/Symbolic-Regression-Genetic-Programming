@@ -48,7 +48,7 @@ class GP(BaseMethod):
         """
 
         features = train_val_test_set[0].columns.tolist()
-
+        
         training_losses, validation_losses, test_losses, best_eqs = fit_and_evaluate_best_equation(
             train_val_test_set,
             self.loss_function,
