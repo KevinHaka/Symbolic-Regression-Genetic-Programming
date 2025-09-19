@@ -1,4 +1,8 @@
 # Libraries and modules
+import os
+import pickle
+import time
+
 import pandas as pd
 import numpy as np
 
@@ -95,22 +99,34 @@ def best_equation(
     temp_loss = np.inf
 
     # Iterate over all equations and find the one with the lowest loss
+    # for idx in range(n_equations):
+    #     y_pred = model.predict(X, idx)
+    #     loss = loss_function(y, y_pred)
+
+    #     # Update best equation if current one has lower loss
+    #     if loss < temp_loss:
+
+    #         # Ensure the equation produces valid values
+    #         y_check_pred = model.predict(X_check, idx)
+    #         if np.any(np.isnan(y_check_pred)) or np.any(np.isinf(y_check_pred)) or not np.all(np.isreal(y_check_pred)): 
+    #             continue
+
+    #         temp_loss = loss
+    #         best_eq = model.equations_.iloc[idx]
+
+    eq = model.equations_.iloc[0]
+    model.equations_.sort_values(by='score', ascending=False, inplace=True)
     for idx in range(n_equations):
-        y_pred = model.predict(X, idx)
-        loss = loss_function(y, y_pred)
+        eq = model.equations_.iloc[idx]
+        y_check_pred = eq.lambda_format(X_check)
 
-        # Update best equation if current one has lower loss
-        if loss < temp_loss:
+        if np.any(np.isnan(y_check_pred)) or np.any(np.isinf(y_check_pred)) or not np.all(np.isreal(y_check_pred)): 
+            continue
 
-            # Ensure the equation produces valid values
-            y_check_pred = model.predict(X_check, idx)
-            if np.any(np.isnan(y_check_pred)) or np.any(np.isinf(y_check_pred)) or not np.all(np.isreal(y_check_pred)): 
-                continue
+        # best_eq = eq
+        break
 
-            temp_loss = loss
-            best_eq = model.equations_.iloc[idx]
-
-    return best_eq
+    return eq#best_eq
 
 def results_to_dataframe(
     results: Dict[str, Dict[str, Dict[str, np.ndarray]]]
@@ -338,8 +354,11 @@ def fit_and_evaluate_best_equation(
     # Initialize the PySRRegressor with warm_start=True to allow iterative fitting
     model = PySRRegressor(warm_start=True, **pysr_params)
     model.set_params(niterations=record_interval) # Adjust the number of generations per interval
+    # model.set_params(should_simplify=False)
+    # model.set_params(verbosity=1)
+    # model.set_params(maxsize=28)
 
-     # Iteratively fit the model and record losses at each interval
+    # Iteratively fit the model and record losses at each interval
     for interval_idx in range(n_records):
         # Fit the model for the current interval
         model.fit(X_train, y_train)
@@ -362,7 +381,7 @@ def fit_and_evaluate_best_equation(
         y_ = np.concatenate([y_train, y_val], axis=0)
     
         a = len(X_val)/(len(X_train)+ len(X_val))
-        X_train, X_val, y_train, y_val = train_test_split(X_, y_, test_size=a)
+        X_train, X_val, y_train, y_val = train_test_split(X_, y_, test_size=a, random_state=pysr_params['random_state'] if 'random_state' in pysr_params else None)
 
     return training_losses, validation_losses, test_losses, best_eqs
 
@@ -372,8 +391,10 @@ def process_task(
     run: int, 
     train_val_test_set: Tuple, 
     method: BaseMethod, 
+    output_dir: str,
+    return_results: bool = False,
     _: Any = None,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """
     Executes a single run of a symbolic regression method on a given dataset.
 
@@ -395,26 +416,50 @@ def process_task(
     method : BaseMethod
         An instance of a class that inherits from `BaseMethod` and implements
         the `run` method.
-    _ : Any, optional
-        Typically used for compatibility with Dask's delayed execution.
+    output_dir : str
+        The directory where the output files will be saved.
+    return_results : bool
+        Flag that determines whether to return the results dictionary.
+    _ : Any
+        Placeholder parameter for creating proper Dask task dependencies.
 
     Returns
     -------
-    Dict[str, Any]
-        A dictionary containing the results of the run, including:
-        - 'dataset_name': Name of the dataset.
-        - 'method_name': Name of the method.
-        - 'run': The run number.
-        - 'losses': The losses recorded during the run.
-        - 'equations': The best equations found.
-        - 'features': The features used by the equations.
+    Dict[str, Any] or None
+        If dependency is not None, returns the results dictionary.
+        Otherwise, results are only saved to disk as pickle files and None is returned.
     """
 
+    # pickle the current parameters to be able to recover them later if needed
+    # method.pysr_params['random_state'] = run
+
+    # if method_name == "RFGPCMI":
+    #     method.method_params['random_state'] = run  # type: ignore
+
+    # parameters = {
+    #     'dataset_name': dataset_name,
+    #     'method_name': method_name,
+    #     'run': run,
+    #     'train_val_test_set': train_val_test_set,
+    #     'method': method,
+    #     'output_dir': output_dir,
+    #     'return_results': return_results
+    # }
+    # with open("parameters.pkl", "wb") as f:
+    #     pickle.dump(parameters, f)
+
     # Run the symbolic regression method and get the results
+    start = time.time()
+    with open("logfile.log", "a", encoding="utf-8") as lf:
+        lf.write(f"Starting: {dataset_name} - {method_name} - Run {run}\n")
+
     temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set)
+    
+    with open("logfile.log", "a", encoding="utf-8") as lf:
+        lf.write(f"Completed: {dataset_name} - {method_name} - Run {run} in {time.time() - start:.2f} seconds\n")
 
     # Organize the results into a dictionary
-    return {
+    results = {
         'dataset_name': dataset_name,
         'method_name': method_name,
         'run': run,
@@ -423,7 +468,25 @@ def process_task(
         'features': temp_features
     }
 
-def send_email(subject, body_message, sender_email, app_password, smtp_server, smtp_port, receiver_email=None):
+    # Save the results to a file
+    filename = f"results_{dataset_name}_{method_name}_{run}.pkl"
+    with open(os.path.join(output_dir, filename), "wb") as f:
+        pickle.dump(results, f)
+
+    if return_results:
+        return results
+    else:
+        return None
+
+def send_email(
+    subject: str, 
+    body_message: str, 
+    sender_email: str, 
+    app_password: str, 
+    smtp_server: str, 
+    smtp_port: int, 
+    receiver_email: Optional[str] = None
+):
     if receiver_email is None:
         receiver_email = sender_email
 
