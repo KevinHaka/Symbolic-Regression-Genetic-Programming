@@ -3,6 +3,7 @@ import pandas as pd
 
 from multiprocessing import Manager
 from typing import Callable, List, Optional, Tuple
+from inspect import signature
 
 from .base import BaseMethod
 from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
@@ -12,6 +13,10 @@ from ..feature_selections.shap import select_features_from_pretrained_models as 
 class GPSHAP(BaseMethod):
     def __init__(
         self,
+        test_size: float = signature(shap_sf).parameters['test_size'].default,
+        val_size: float = signature(shap_sf).parameters['val_size'].default,
+        n_runs: int = signature(shap_sf).parameters['n_runs'].default,
+        n_top_features: int = signature(shap_sf).parameters['n_top_features'].default,
         loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
         record_interval: int = 1,
         **pysr_params
@@ -25,6 +30,14 @@ class GPSHAP(BaseMethod):
 
         Parameters
         ----------
+        test_size : float
+            Proportion of the dataset to include in the test split.
+        val_size : float
+            Proportion of the dataset to include in the validation split.
+        n_runs : int
+            Number of runs to perform.
+        n_top_features : int
+            Number of top features to select.
         loss_function : Callable
             Function to compute the loss between true and predicted values.
         record_interval : int
@@ -35,20 +48,23 @@ class GPSHAP(BaseMethod):
 
         super().__init__(loss_function, record_interval, **pysr_params)
         self._feature_cache = Manager().dict()
+        self.test_size = test_size
+        self.val_size = val_size
+        self.n_runs = n_runs
+        self.n_top_features = n_top_features
 
     def clear_cache(self):
         """Clear the feature cache."""
         self._feature_cache.clear()
 
     @staticmethod
-    def _get_dataset_key(X: pd.DataFrame) -> int:
-        return hash(tuple(X.columns))
+    def _get_dataset_key(X: pd.DataFrame) -> Tuple[str, ...]:
+        return tuple(sorted(X.columns))
     
     def precompute_features(
         self, 
         X: pd.DataFrame, 
         y: np.ndarray,
-        **shap_params
     ) -> List[str]:
         """
         Precompute and cache the selected features using SHAP.
@@ -56,7 +72,6 @@ class GPSHAP(BaseMethod):
         Args:
             X (pd.DataFrame): Feature DataFrame.
             y (np.ndarray): Target variable.
-            shap_params (dict): Additional parameters for SHAP feature selection.
         
         Returns:
             List[str]: List of selected feature names.
@@ -65,7 +80,16 @@ class GPSHAP(BaseMethod):
         dataset_key = self._get_dataset_key(X)
 
         if dataset_key not in self._feature_cache:
-            selected_features, _ = shap_sf(X, y, **shap_params)
+            selected_features, _ = shap_sf(
+                X, y,
+                test_size=self.test_size,
+                val_size=self.val_size,
+                n_runs=self.n_runs,
+                n_top_features=self.n_top_features,
+                loss_function=self.loss_function,
+                record_interval=self.record_interval,
+                **self.pysr_params
+            )
             self._feature_cache[dataset_key] = selected_features
 
         return selected_features
@@ -118,10 +142,10 @@ class GPSHAP(BaseMethod):
         # Get a unique key for the dataset to cache features
         dataset_key = self._get_dataset_key(X_train)
 
-        if dataset_key not in self._feature_cache:
+        if dataset_key not in self._feature_cache.keys():
             X = pd.concat([X_train, X_val, X_test], ignore_index=True)
             y = np.concatenate([y_train, y_val, y_test])
-            selected_features = self.precompute_features(X, y, **self.pysr_params)
+            selected_features = self.precompute_features(X, y)
             self._feature_cache[dataset_key] = selected_features
 
         else:
