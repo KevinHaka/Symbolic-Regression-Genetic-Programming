@@ -2,28 +2,30 @@
 import pandas as pd
 import numpy as np
 
-from typing import Sequence, Union, Tuple, Dict
+from typing import Callable, Optional, Sequence, Union, Tuple, Dict, List
 
 from pmlb import fetch_data
-from ucimlrepo import fetch_ucirepo 
+from ucimlrepo import fetch_ucirepo, dotdict
+
+# List all available datasets
+def list_available_datasets() -> List[str]:
+    return sorted(_DATASET_REGISTRY.keys())
 
 # Custom dataset loading functions
 def load_datasets(
     dataset_names: Sequence[Union[str, Tuple[str, str]]]
-) -> Dict[str, dict]:
+) -> Dict[str, Dict[str, Union[pd.DataFrame, np.ndarray]]]:
     """
-    Load multiple datasets by name, with optional renaming.
+    Load multiple datasets by name with optional renaming.
 
-    Accepts a list of dataset names or (name, rename) tuples.
-    Returns a dictionary where each key is a dataset name (or its rename)
-    and each value is a dict with 'X' (features) and 'y' (target).
+    Each element in `dataset_names` can be:
+      - a string: the dataset's registered name (used as the key)
+      - a (name, alias) tuple: original name plus a custom dictionary key
 
     Parameters
     ----------
-    dataset_names : list of str or (str, str)
-        List of dataset names or (name, rename) tuples. Each item can be:
-        - str: Dataset name (used as both identifier and key)
-        - tuple: (original_name, renamed_key) for custom naming
+    dataset_names : sequence of (str | (str, str))
+        Names or (name, alias) tuples referring to registered loaders.
 
     Returns
     -------
@@ -33,24 +35,8 @@ def load_datasets(
     """
 
     datasets = {}
-    
-    # Define mapping of dataset names to generation functions
-    custom_functions = {
-        'F1': _generate_F1_dataset,
-        'F2': _generate_F2_dataset,
-    }
-    
-    # Define PMLB (Penn Machine Learning Benchmarks) dataset names and functions
-    pmlb_dataset_names = {
-        "4544_GeographicalOriginalofMusic": _4544_geographical_original_of_music,
-        "505_tecator": _505_tecator,
-    }
-    
-    # Define UCI ML Repository datasets with their loading functions
-    uci_dataset_names = {
-        "Communities and Crime": _communities_and_crime,
-        "Communities and Crime Unnormalized": _communities_and_crime_unnormalized,
-    }
+    unknown_datasets = []
+    available_datasets = list_available_datasets()
 
     # Process each requested dataset
     for item in dataset_names:
@@ -60,27 +46,24 @@ def load_datasets(
         else:
             name, rename = item
 
-        # Check if the dataset is a custom synthetic dataset
-        if name in custom_functions:
-            # Generate synthetic dataset using custom function
-            X, y = custom_functions[name]()
-            datasets[rename] = {'X': X, 'y': y}
-
-        # Check if the dataset is available in PMLB
-        elif name in pmlb_dataset_names:
-            # Load dataset from PMLB using specific function
-            X, y = pmlb_dataset_names[name]()
-            datasets[rename] = {'X': X, 'y': y}
-        
-        # Check if the dataset is available in UCI ML repository
-        elif name in uci_dataset_names:
-            # Load dataset from UCI ML repository using specific function
-            X, y = uci_dataset_names[name]()
+        # Check if the dataset is available
+        if name in available_datasets:
+            # Load the dataset using its registered function
+            X, y = _DATASET_REGISTRY[name]()
             datasets[rename] = {'X': X, 'y': y}
 
         else:
-            # Dataset not found in any source
-            print(f'Dataset "{name}" not found in available sources.')
+            # Collect unknown dataset names for reporting
+            unknown_datasets.append(name)
+
+    # Report any unknown datasets
+    if unknown_datasets:
+        print("Unknown datasets:")
+
+        for name in unknown_datasets:
+            print(f" - {name}")
+        
+        print("\nFor a list of available datasets, use list_available_datasets().")
 
     return datasets
 
@@ -102,7 +85,7 @@ def _4544_geographical_original_of_music(
     
     # Fetch the dataset from PMLB
     dataset = fetch_data("4544_GeographicalOriginalofMusic")
-    assert type(dataset) is pd.DataFrame, "Expected dataset to be a pandas DataFrame"
+    assert isinstance(dataset, pd.DataFrame), "Expected pandas DataFrame"
 
     # Separate features and target
     X = dataset.drop(columns="target")
@@ -126,7 +109,7 @@ def _505_tecator(
     
     # Fetch the dataset from PMLB
     dataset = fetch_data("505_tecator")
-    assert type(dataset) is pd.DataFrame, "Expected dataset to be a pandas DataFrame"
+    assert isinstance(dataset, pd.DataFrame), "Expected pandas DataFrame"
     
     # Separate features and target
     X = dataset.drop(columns="target")
@@ -157,6 +140,12 @@ def _communities_and_crime(
 
     # Fetch dataset from UCI ML repository
     dataset = fetch_ucirepo(name="Communities and Crime")
+
+    # Validate dataset structure
+    assert isinstance(dataset.data, dotdict), "Expected dataset.data to be a dotdict"
+    assert isinstance(dataset.data.original, pd.DataFrame), "Expected dataset.data.original to be a DataFrame"
+
+    # Remove unwanted columns
     dataset.data.original = dataset.data.original.drop(removing_features, axis=1)
     
     # Replace "?" with np.nan for proper missing value handling
@@ -201,7 +190,12 @@ def _communities_and_crime_unnormalized(
     
     # Fetch dataset from UCI ML repository
     dataset = fetch_ucirepo(name="Communities and Crime Unnormalized")
-    
+
+    # Validate dataset structure
+    assert isinstance(dataset.data, dotdict), "Expected dataset.data to be a dotdict"
+    assert isinstance(dataset.data.targets, pd.DataFrame), "Expected dataset.data.targets to be a DataFrame"
+    assert isinstance(dataset.data.original, pd.DataFrame), "Expected dataset.data.original to be a DataFrame"
+
     # Define features to remove: all other targets (except chosen one) + identifier columns
     removing_features = dataset.data.targets.columns.to_list() + [
         'communityname', 'countyCode', 'communityCode', 'State', 'fold'
@@ -226,53 +220,68 @@ def _communities_and_crime_unnormalized(
 
 # Functions to generate synthetic datasets
 def _generate_F1_dataset(
+    n_samples: int = 100,
+    n_noise_features: int = 50,
+    random_state: Optional[int] = None
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
     Generate the F1 synthetic dataset based on Newton's law of gravitation.
     
-    This function creates a synthetic dataset with 3 informative features and 50 noise
+    This function creates a synthetic dataset with 3 informative features and 'n' noise
     features to test feature selection methods. The target follows Newton's gravitational
     law formula.
 
     Formula: F1 = -g * (X1 * X2) / X3**2
     where g = 6.67408e-11 (gravitational constant)
 
+    Parameters
+    ----------
+    n_samples : int, default=100
+        Number of samples to generate.
+    n_noise_features : int, default=50
+        Number of noise features to include.
+    random_state : int, optional
+        Random seed for reproducibility.
+
     Returns
     -------
     X : pandas.DataFrame
-        Feature matrix with shape (100, 53). Contains X1, X2, X3 (informative)
-        and 50 noise features (noise_1, noise_2, ..., noise_50).
+        Feature matrix with shape (n_samples, n_noise_features+3). Contains X1, X2, X3 (informative)
+        and 'n_noise_features' noise features (noise_1, noise_2, ..., noise_n).
     y : np.ndarray
-        Target values with shape (100,). Gravitational force values.
+        Target values with shape (n_samples,). Gravitational force values.
     """
-
-    n_noise_features = 50
-    n_samples = 100
+    # Set random seed for reproducibility
+    rng = np.random.default_rng(random_state)
     
     # Generate true input features
-    X1 = np.random.uniform(0, 1, n_samples)  # Mass 1
-    X2 = np.random.uniform(0, 1, n_samples)  # Mass 2
-    X3 = np.random.uniform(1, 2, n_samples)  # Distance (> 0 to avoid division by zero)
-    
+    X1 = rng.uniform(0, 1, n_samples)  # Mass 1
+    X2 = rng.uniform(0, 1, n_samples)  # Mass 2
+    X3 = rng.uniform(1, 2, n_samples)  # Distance (> 0 to avoid division by zero)
+
     # Compute target using Newton's law of gravitation
     g = 6.67408e-11  # Gravitational constant
     y = -g * (X1 * X2) / (X3**2)
 
     # Generate noise features (irrelevant for prediction)
-    noise_features = np.random.uniform(0, 1, (n_samples, n_noise_features))
-    
+    noise_features = rng.uniform(0, 1, (n_samples, n_noise_features))
+
+    # Create column names
+    variable_names = ['X1', 'X2', 'X3'] + [f'noise_{i+1}' for i in range(n_noise_features)]
+    variable_names[-1] += '_F1'  # Unique name for last noise feature
+
+    # Combine informative and noise features
+    variable_values = np.column_stack((X1, X2, X3, noise_features))
+
     # Build DataFrame with informative and noise features
-    X = pd.DataFrame({
-        'X1': X1,
-        'X2': X2,
-        'X3': X3,
-        **{f'noise_{i+1}': noise_features[:,i] for i in range(n_noise_features - 1)},
-        f'noise_{n_noise_features}_F1': noise_features[:, n_noise_features - 1]  # Unique name for last noise feature
-    })
+    X = pd.DataFrame(variable_values, columns=variable_names)
 
     return X, y
 
 def _generate_F2_dataset(
+    n_samples: int = 11000,
+    n_noise_features: int = 50,
+    random_state: Optional[int] = None
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
     Generate the F2 synthetic dataset as described in Wang et al., 2024.
@@ -286,33 +295,49 @@ def _generate_F2_dataset(
     Returns
     -------
     X : pandas.DataFrame
-        Feature matrix with shape (11000, 53). Contains X1, X2, X3 (informative)
-        and 50 noise features (noise_1, noise_2, ..., noise_50).
+        Feature matrix with shape (n_samples, n_noise_features+3). Contains X1, X2, X3 (informative)
+        and 'n_noise_features' noise features (noise_1, noise_2, ..., noise_n).
     y : np.ndarray
-        Target values with shape (11000,). Rational function values following F2 formula.
+        Target values with shape (n_samples,). Rational function values following F2 formula.
     """
 
-    n_noise_features = 50
-    n_samples = 11000  # Larger sample size for better statistical power
+    # Set random seed for reproducibility
+    rng = np.random.default_rng(random_state)
     
     # Generate true input features with specified ranges
-    X1 = np.random.uniform(-1, 1, n_samples)  # Symmetric around zero
-    X3 = np.random.uniform(-1, 1, n_samples)  # Symmetric around zero
-    X2 = np.random.uniform(1, 2, n_samples)   # Positive values for stable denominator
+    X1 = rng.uniform(-1, 1, n_samples)  # Symmetric around zero
+    X3 = rng.uniform(-1, 1, n_samples)  # Symmetric around zero
+    X2 = rng.uniform(1, 2, n_samples)   # Positive values for stable denominator
     
     # Compute target using the F2 rational function
     y = 30 * X1 * X3 / ((X1 - 10) * (X2 ** 2))
     
     # Generate noise features (irrelevant for prediction)
-    noise_features = np.random.uniform(0, 1, size=(n_samples, n_noise_features))
+    noise_features = rng.uniform(0, 1, size=(n_samples, n_noise_features))
+
+    # Create column names
+    variable_names = ['X1', 'X2', 'X3'] + [f'noise_{i+1}' for i in range(n_noise_features)]
+    variable_names[-1] += '_F1'  # Unique name for last noise feature
+
+    # Combine informative and noise features
+    variable_values = np.column_stack((X1, X2, X3, noise_features))
     
     # Build DataFrame with informative and noise features
-    X = pd.DataFrame({
-        'X1': X1,
-        'X2': X2,
-        'X3': X3,
-        **{f'noise_{i+1}': noise_features[:, i] for i in range(n_noise_features - 1)},
-        f'noise_{n_noise_features}_F2': noise_features[:, n_noise_features - 1]  # Unique name for last noise feature
-    })
+    X = pd.DataFrame(variable_values, columns=variable_names)
     
     return X, y
+
+# Registry of available datasets and their loading functions
+_DATASET_REGISTRY: Dict[str, Callable] = {
+    # Synthetic
+    "F1": _generate_F1_dataset,
+    "F2": _generate_F2_dataset,
+
+    # PMLB
+    "4544_GeographicalOriginalofMusic": _4544_geographical_original_of_music,
+    "505_tecator": _505_tecator,
+
+    # UCI
+    "Communities and Crime": _communities_and_crime,
+    "Communities and Crime Unnormalized": _communities_and_crime_unnormalized,
+}
