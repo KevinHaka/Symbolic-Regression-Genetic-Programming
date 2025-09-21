@@ -48,7 +48,6 @@ def inv(x):
 def sqrt_sympy(x, evaluate=True):
     return sp.sqrt(x, evaluate=evaluate)
 
-
 def main(): 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(script_dir, 'data')
@@ -68,13 +67,13 @@ def main():
     ns = 100
     ci = 0.99
     k = 5
-    record_interval = 5
-    n_submodels = 3
+    record_interval = 10
+    n_submodels = 2
 
     pysr_params = {
-        "populations": 2,
-        "population_size": 25,
-        "niterations": 100,
+        "populations": 1,
+        "population_size": 20,
+        "niterations": 30,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {
@@ -83,13 +82,13 @@ def main():
         },
 
         "verbosity": 0,
-        "parallelism": "serial",
-        # "deterministic": True,
         "input_stream": 'devnull',
+        "parallelism": "serial",
+        "deterministic": False,
     }
     dataset_names = [
         "F1",
-        #"F2",
+        "F2",
         ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         "505_tecator",
     	("Communities and Crime", "CCN"),

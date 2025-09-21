@@ -95,14 +95,14 @@ def main():
     ns = 100
     ci = 0.99
     k = 5
-    record_interval = 5
-    n_submodels = 3
+    record_interval = 10
+    n_submodels = 2
     n_jobs = -1  # Number of parallel jobs for joblib
 
     pysr_params = {
-        "populations": 2,
-        "population_size": 25,
-        "niterations": 100,
+        "populations": 1,
+        "population_size": 20,
+        "niterations": 30,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {
@@ -111,14 +111,14 @@ def main():
         },
 
         "verbosity": 0,
-        "parallelism": "serial",
-        # "deterministic": True,
         "input_stream": 'devnull',
+        "parallelism": "serial",
+        "deterministic": False,
     }
 
     dataset_names = [
         "F1",
-        #"F2",
+        "F2",
         ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         "505_tecator",
         ("Communities and Crime", "CCN"),
@@ -199,7 +199,7 @@ def main():
     # Πολύ απλή μπάρα προόδου με tqdm
     print("Running tasks...")
     with tqdm_joblib(desc="Parallel tasks", total=len(tasks)) as progress_bar:
-        method_results = Parallel(n_jobs=n_jobs, pre_dispatch="n_jobs")(task for task in tasks)
+        method_results = Parallel(n_jobs=n_jobs, pre_dispatch="n_jobs", max_nbytes=None)(task for task in tasks)
     method_results = [result for result in method_results if result]
     print("Completed initial methods.")
 
@@ -235,7 +235,7 @@ def main():
                     )(X, y)
                 )
 
-        Parallel(n_jobs=1)(preparing_tasks)
+        Parallel(n_jobs=n_jobs, max_nbytes=None)(preparing_tasks)
         print("Completed GPSHAP feature precomputation.")
 
         for dataset_name, dataset in datasets.items():
@@ -251,7 +251,7 @@ def main():
             ])
 
         with tqdm_joblib(desc="GPSHAP tasks", total=len(gpshap_tasks)) as progress_bar:
-            Parallel(n_jobs=n_jobs, pre_dispatch="n_jobs")(task for task in gpshap_tasks)
+            Parallel(n_jobs=n_jobs, pre_dispatch="n_jobs", max_nbytes=None)(task for task in gpshap_tasks)
         print("Completed GPSHAP tasks.")
 
 
