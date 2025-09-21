@@ -2,9 +2,11 @@
 data/
 outputs/
 __pycache__/
+.venv/
 *.egg-info/
 
 # Files to ignore
 *.pickle
 *.pkl
 *.log
+.env
