@@ -11,14 +11,14 @@ import sympy as sp
 import sys
 import os
 
-# Add the path to the cloned NPEET repository
-script_dir = os.path.dirname(os.path.abspath(__file__))
-npeet_path = os.path.join(script_dir, 'NPEET')
-if os.path.isdir(npeet_path):
-    sys.path.append(npeet_path)
+# # Add the path to the cloned NPEET repository
+# script_dir = os.path.dirname(os.path.abspath(__file__))
+# npeet_path = os.path.join(script_dir, 'NPEET')
+# if os.path.isdir(npeet_path):
+#     sys.path.append(npeet_path)
 
-# Add the project's source directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+# # Add the project's source directory to the Python path
+# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 from dask.delayed import delayed
 from dask.base import compute
@@ -278,13 +278,21 @@ if __name__ == '__main__':
     message = f"Script finished running in {time_parts[0]} seconds."
     print(message)
 
-    send_email(
-        subject="Script Finished Running",
-        body_message=message,
-        sender_email="kevinhaka98@gmail.com",
-        app_password="higx cunc swrs tiyr",
-        smtp_server="smtp.gmail.com",
-        smtp_port=465,
+    # Ανάγνωση credentials από μεταβλητές περιβάλλοντος
+    sender_email = os.getenv("EMAIL_SENDER")
+    app_password = os.getenv("EMAIL_APP_PASSWORD")
+
+    if sender_email and app_password:
+        send_email(
+            subject="Script Finished Running",
+            body_message=message,
+            sender_email=sender_email,
+            app_password=app_password,
+            smtp_server="smtp.gmail.com",
+            smtp_port=465,
     )
+        
+    else:
+        print("Email credentials not found in environment variables. Skipping email notification.")
 
     
