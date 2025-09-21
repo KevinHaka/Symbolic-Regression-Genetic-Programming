@@ -91,6 +91,8 @@ class GPSHAP(BaseMethod):
                 **self.pysr_params
             )
             self._feature_cache[dataset_key] = selected_features
+        else:
+            selected_features = self._feature_cache[dataset_key]
 
         return selected_features
 
@@ -117,6 +119,8 @@ class GPSHAP(BaseMethod):
         if dataset_key not in self._feature_cache:
             selected_features, _ = shap_pretrained_sf(X_trains, gp_equations, n_top_features)
             self._feature_cache[dataset_key] = selected_features
+        else:
+            selected_features = self._feature_cache[dataset_key]
 
         return selected_features
         
