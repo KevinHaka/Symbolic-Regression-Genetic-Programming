@@ -266,7 +266,8 @@ def _generate_F1_dataset(
         'X1': X1,
         'X2': X2,
         'X3': X3,
-        **{f'noise_{i+1}': noise_features[:,i] for i in range(n_noise_features)}
+        **{f'noise_{i+1}': noise_features[:,i] for i in range(n_noise_features - 1)},
+        f'noise_{n_noise_features}_F1': noise_features[:, n_noise_features - 1]  # Unique name for last noise feature
     })
 
     return X, y
@@ -303,14 +304,15 @@ def _generate_F2_dataset(
     y = 30 * X1 * X3 / ((X1 - 10) * (X2 ** 2))
     
     # Generate noise features (irrelevant for prediction)
-    noise = np.random.uniform(0, 1, size=(n_samples, n_noise_features))
+    noise_features = np.random.uniform(0, 1, size=(n_samples, n_noise_features))
     
     # Build DataFrame with informative and noise features
     X = pd.DataFrame({
         'X1': X1,
         'X2': X2,
         'X3': X3,
-        **{f'noise_{i+1}': noise[:, i] for i in range(n_noise_features)}
+        **{f'noise_{i+1}': noise_features[:, i] for i in range(n_noise_features - 1)},
+        f'noise_{n_noise_features}_F2': noise_features[:, n_noise_features - 1]  # Unique name for last noise feature
     })
     
     return X, y
