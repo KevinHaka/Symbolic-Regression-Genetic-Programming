@@ -5,6 +5,7 @@ import time
 
 import pandas as pd
 import numpy as np
+import sympy as sp
 
 from sklearn.model_selection import train_test_split
 from pysr import PySRRegressor
@@ -505,3 +506,79 @@ def send_email(
             
     except Exception as e:
         print(f"Failed to send email: {e}")
+
+def gather_splits(split_results, index):
+    """Gathers a specific part of the train-val-test split results (e.g., index 0 for X_train)."""
+    return tuple(split[index] for split in split_results)
+
+def extract_equations(results, index):
+    """Extracts the equations from the results."""
+    return [result['equations'][index] for result in results]
+
+def inv(x):
+    return 1 / x
+
+def sqrt_sympy(x, evaluate=True):
+    return sp.sqrt(x, evaluate=evaluate)
+
+def timeit(
+    func: Callable, 
+    *args: Any, 
+    n_runs: int = 1, 
+    **kwargs: Any
+) -> Dict[str, Any]:
+    """
+    Measure execution time of a callable.
+
+    Behavior
+    --------
+    - If n_runs == 1: runs once and returns a dict with the single run time and the function results.
+    - If n_runs > 1: runs multiple times and returns timing statistics (no function results).
+
+    Parameters
+    ----------
+    func : callable
+        Function to execute.
+    *args :
+        Positional arguments passed to func.
+    n_runs : int, default=1
+        Number of executions.
+    **kwargs :
+        Keyword arguments passed to func.
+
+    Returns
+    -------
+    dict
+        Single run:
+            {
+                'time': float,
+                'results': Any
+            }
+
+        Multiple runs:
+            {
+                'average_time': float,
+                'std_time': float,
+                'all_times': list[float],
+            }
+    """
+
+    times: list[float] = []
+
+    # Execute n_runs times
+    for _ in range(n_runs):
+        start = time.perf_counter()
+        results = func(*args, **kwargs)
+        times.append(time.perf_counter() - start)
+
+    if n_runs == 1:
+        return {
+            'time': times[0],
+            'results': results
+        }
+
+    return {
+        'average_time': np.mean(times),
+        'std_time': np.std(times),
+        'all_times': times,
+    }
