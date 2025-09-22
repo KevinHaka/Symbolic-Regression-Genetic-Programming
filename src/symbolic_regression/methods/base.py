@@ -3,7 +3,7 @@ import pandas as pd
 
 from inspect import signature
 from abc import ABC, abstractmethod
-from typing import Callable, Tuple, List
+from typing import Callable, Tuple, List, Dict, Any
 
 from pysr import PySRRegressor
 
@@ -14,7 +14,7 @@ class BaseMethod(ABC):
         self,
         loss_function: Callable[[np.ndarray, np.ndarray], float],
         record_interval: int,
-        **pysr_params,
+        pysr_params: Dict[str, Any],
     ) -> None:
         """
         Shared init logic for all methods.
