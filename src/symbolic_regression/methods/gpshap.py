@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from multiprocessing import Manager
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from inspect import signature
 
 from .base import BaseMethod
@@ -19,7 +19,7 @@ class GPSHAP(BaseMethod):
         n_top_features: int = signature(shap_sf).parameters['n_top_features'].default,
         loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
         record_interval: int = 1,
-        **pysr_params
+        pysr_params: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize the GPSHAP method.
@@ -46,16 +46,15 @@ class GPSHAP(BaseMethod):
             Parameters for PySRRegressor.
         """
 
-        super().__init__(loss_function, record_interval, **pysr_params)
+        if pysr_params is None:
+            pysr_params = {}
+
+        super().__init__(loss_function, record_interval, pysr_params)
         self._feature_cache = Manager().dict()
         self.test_size = test_size
         self.val_size = val_size
         self.n_runs = n_runs
         self.n_top_features = n_top_features
-
-    def clear_cache(self):
-        """Clear the feature cache."""
-        self._feature_cache.clear()
 
     @staticmethod
     def _get_dataset_key(X: pd.DataFrame) -> Tuple[str, ...]:

@@ -6,13 +6,13 @@ from inspect import signature
 
 from .base import BaseMethod
 from ..utils.pysr_utils import cumulative_lambda
-from .gp import GP
+from .gpcmi import GPCMI
 
 class RFGP(BaseMethod):
     def __init__(
         self,
         n_submodels: int = 2,
-        method_class: Type[BaseMethod] = GP,
+        method_class: Type[BaseMethod] = GPCMI,
         method_params: Optional[Dict[str, Any]] = None
     ) -> None:
         """
@@ -27,18 +27,14 @@ class RFGP(BaseMethod):
         if method_params is None:
             method_params = {}
 
-        # Get the signature of the method_class's __init__ to identify its specific parameters
+        pysr_params = method_params.get('pysr_params', {})
+
+        # Get the signature of the method class to extract default parameters
         method_sig = signature(method_class)
-        method_param_names = set(method_sig.parameters.keys())
+        loss_function = method_params.get('loss_function', method_sig.parameters['loss_function'].default)
+        record_interval = method_params.get('record_interval', method_sig.parameters['record_interval'].default)
 
-        # Separate PySR parameters from sub-method specific parameters
-        pysr_params = {k: v for k, v in method_params.items() if k not in method_param_names}
-        method_specific_params = {k: v for k, v in method_params.items() if k in method_param_names}
-
-        loss_function = method_specific_params.get('loss_function', method_sig.parameters['loss_function'].default)
-        record_interval = method_specific_params.get('record_interval', method_sig.parameters['record_interval'].default)
-
-        super().__init__(loss_function, record_interval, **pysr_params)
+        super().__init__(loss_function, record_interval, pysr_params)
         self.n_submodels = n_submodels
         self.method_class = method_class
         self.method_params = method_params

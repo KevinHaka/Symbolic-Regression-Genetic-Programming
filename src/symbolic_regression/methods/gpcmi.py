@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from typing import Callable, Optional, Tuple, List
+from typing import Any, Callable, Dict, Optional, Tuple, List
 from inspect import signature
 
 from .base import BaseMethod
@@ -16,7 +16,7 @@ class GPCMI(BaseMethod):
         k: int = signature(cmi_sf).parameters['k'].default,
         loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
         record_interval: int = 1,
-        **pysr_params
+        pysr_params: Optional[Dict[str, Any]] = None
     ) -> None:
         """
         Initialize the GPCMI method.
@@ -30,7 +30,10 @@ class GPCMI(BaseMethod):
             pysr_params (Dict[str, Any]): Parameters for PySR.
         """
 
-        super().__init__(loss_function, record_interval, **pysr_params)
+        if pysr_params is None:
+            pysr_params = {}
+
+        super().__init__(loss_function, record_interval, pysr_params)
         self.ns = ns
         self.ci = ci
         self.k = k
