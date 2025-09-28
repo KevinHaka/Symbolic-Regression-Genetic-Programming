@@ -37,7 +37,6 @@ from symbolic_regression.utils.pysr_utils import (
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-
 def main(): 
     # Find the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +50,7 @@ def main():
     os.makedirs(run_output_dir)
 
     # create a log file
-    log_file = os.path.join(script_dir, "logfile.log")
+    log_file = os.path.join(script_dir, "logfile.log") # NOTE: I am not sure I will need this
     if os.path.exists(log_file): os.remove(log_file)
 
     # ---------------- Parameters ----------------
@@ -63,15 +62,15 @@ def main():
     ns = 100
     ci = 0.99
     k = 5
-    record_interval = 5
+    record_interval = 5 # NOTE: I have to split the job that this parameter do in two variables
     n_submodels = 2
     num_workers = (os.cpu_count() or 2) // 2
     threads_per_worker = 2
 
     pysr_params = {
-        "populations": 3,
-        "population_size": 33,
-        "niterations": 150,
+        "populations": 2,
+        "population_size": 22,
+        "niterations": 100,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {
@@ -85,15 +84,16 @@ def main():
         "deterministic": False,
     }
 
+    # Choose datasets to run
     dataset_names = [
         "F1",
         # "F2",
         # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
-        "505_tecator",
-    	("Communities and Crime", "CCN"),
+        # "505_tecator",
+    	# ("Communities and Crime", "CCN"),
         # ("Communities and Crime Unnormalized", "CCUN"),   
     ]
-    datasets = load_datasets(dataset_names)
+    datasets = load_datasets(dataset_names) # Load datasets
 
     gp_params = {
         "loss_function": nrmse_loss,
@@ -125,36 +125,43 @@ def main():
     methods = {
         "GP": GP(**gp_params),
         "GPSHAP": GPSHAP(**gpshap_params),
-        # "GPCMI": GPCMI(**gpcmi_params),
+        "GPCMI": GPCMI(**gpcmi_params),
     	"RFGPCMI": RFGP(**rfgpcmi_params),
     }
 
+    # Get number of iterations from one of the methods
     niterations = methods[next(iter(methods))].pysr_params["niterations"]
+
+    # Define epochs based on record interval
     epochs = arange(record_interval, niterations+1, record_interval)
 
     # ---------------- End Parameters ----------------
 
-    # n_records = methods[list(methods.keys())[0]].n_records
-    delayed_tasks = {}
+    delayed_tasks = {} # To hold all delayed tasks
 
+    # Iterate over datasets
     for dataset_name, dataset in datasets.items():
-        delayed_tasks[dataset_name] = {}
+        delayed_tasks[dataset_name] = {} # To hold tasks for each dataset
 
-        X = dataset["X"]
-        y = dataset["y"]
+        X = dataset["X"] # Features
+        y = dataset["y"] # Target
 
-        delayed_splits = [delayed(train_val_test_split)(X, y) for _ in range(n_runs)]
+        # Create delayed tasks for data splits
+        delayed_splits = [delayed(train_val_test_split, pure=False)(X, y, test_size, val_size) for _ in range(n_runs)]
         
+        # Iterate over methods
         for method_name, method in methods.items():
-            delayed_tasks[dataset_name][method_name] = []
-            return_results = True if method_name == "GP" and ("GPSHAP" in methods) else False
+            delayed_tasks[dataset_name][method_name] = [] # To hold tasks for each method
+
+            # Determine if results should be returned for this method
+            return_results = True if (method_name == "GP") and ("GPSHAP" in methods) else False
 
             if method_name == "GPSHAP": continue  # Skip GPSHAP for now, as it requires precomputed features
 
-            # Create a delayed task for each method and dataset
+            # Create a delayed task for each run
             for run in range(n_runs):
                 delayed_tasks[dataset_name][method_name].append(
-                    delayed(process_task)(
+                    delayed(process_task, pure=False)(
                         dataset_name, 
                         method_name, 
                         run, 
@@ -165,9 +172,13 @@ def main():
                     )
                 )
         
+        # Special handling for GPSHAP, which requires precomputed features
         if ("GPSHAP" in methods):
             if ('GP' in methods):
-                delayed_X_trains = delayed(gather_splits)(delayed_splits, 0)  # Gather X_train from splits
+                # Gather X_train from splits
+                delayed_X_trains = delayed(gather_splits)(delayed_splits, 0)  
+
+                # Extract equations from GP runs
                 delayed_gp_equations = delayed(extract_equations)(delayed_tasks[dataset_name]["GP"], -1)
 
                 # Use GP's equations for GPSHAP
@@ -176,11 +187,13 @@ def main():
                 )
 
             else:
+                # Use current dataset for GPSHAP
                 delayed_precomputed_features_task = delayed(methods["GPSHAP"].precompute_features)(X, y)
 
+            # Create delayed tasks for each GPSHAP run
             for run in range(n_runs):
                 delayed_tasks[dataset_name]["GPSHAP"].append(
-                    delayed(process_task)(
+                    delayed(process_task, pure=False)(
                         dataset_name, 
                         'GPSHAP', 
                         run, 
@@ -192,6 +205,7 @@ def main():
                     )
                 )
 
+    # Flatten all tasks into a single list for computation
     tasks_to_run = [
         task 
         for methods_dict in delayed_tasks.values() 
@@ -210,17 +224,23 @@ def main():
         )
     print("All tasks completed successfully.")
 
+    # Load and aggregate results
     task_results = load_task_results(run_output_dir)
     print(f"\nLoaded {len(task_results)} task results from {run_output_dir}")
 
+    # Collect results into a structured format
     results, equations, features = collect_results(task_results, datasets, methods)
+
+    # Convert results to a DataFrame
     results_df = results_to_dataframe(results, epochs)
+
+    # Save results to a pickle file
     filename = save_results(results_df, equations, features, prefix="data")
     print(f"\nResults saved to {filename}")
 
 if __name__ == '__main__':
     # Calculate elapsed time
-    elapsed_time = timeit(main)['time']
+    elapsed_time = timeit(main, n_runs=1)['time']
 
     # Format the elapsed time as H:MM:SS
     td_str = str(datetime.timedelta(seconds=elapsed_time))
@@ -242,6 +262,7 @@ if __name__ == '__main__':
             subject="Script Finished Running",
             body_message=message,
             sender_email=sender_email,
+            receiver_email=sender_email,
             app_password=app_password,
             smtp_server="smtp.gmail.com",
             smtp_port=465,
