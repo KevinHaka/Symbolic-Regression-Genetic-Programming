@@ -1,4 +1,5 @@
 # Libraries and modules
+import datetime
 import os
 import pickle
 import time
@@ -21,10 +22,31 @@ from inspect import signature
 import smtplib
 from email.message import EmailMessage
 
+def mse_loss(
+    y_true: np.ndarray, 
+    y_pred: np.ndarray
+) -> np.float64:
+    """
+    Computes the Mean Squared Error (MSE) between true and predicted values.
+
+    Parameters
+    ----------
+    y_true : np.ndarray
+        True target values.
+    y_pred : np.ndarray
+        Predicted target values.
+
+    Returns
+    -------
+    np.float64
+        The MSE value.
+    """
+    return ((y_true - y_pred) ** 2).mean()
+
 def rmse_loss(
     y_true: np.ndarray, 
     y_pred: np.ndarray
-) -> float:
+) -> np.float64:
     """
     Computes the Root Mean Squared Error (RMSE) between true and predicted values.
 
@@ -37,15 +59,17 @@ def rmse_loss(
 
     Returns
     -------
-    float
+    np.float64
         The RMSE value.
     """
-    return np.sqrt(np.mean((y_true - y_pred) ** 2))
+    return np.sqrt(mse_loss(y_true, y_pred))
 
 def nrmse_loss(
     y_true: np.ndarray,
-    y_pred: np.ndarray
-) -> float:
+    y_pred: np.ndarray,
+    method: str = 'range',
+    iqr_quantiles: Tuple[float, float] = (25.0, 75.0)
+) -> np.float64:
     """
     Computes the Normalized Root Mean Squared Error (NRMSE) between true and predicted values.
 
@@ -55,13 +79,60 @@ def nrmse_loss(
         True target values.
     y_pred : np.ndarray
         Predicted target values.
+    method : str
+        Normalization method to use:
+            - 'mean': Normalizes by the mean of y_true.
+            - 'range': Normalizes by the range (max - min) of y_true.
+            - 'std': Normalizes by the standard deviation of y_true.
+            - 'iqr': Normalizes by the interquantile range (IQR) defined by iqr_quantiles.
+    iqr_quantiles : tuple(float, float), optional
+        Percentiles for the IQR when method == 'iqr'. Defaults to (25.0, 75.0).
 
     Returns
     -------
-    float
+    np.float64
         The NRMSE value.
     """
-    return rmse_loss(y_true, y_pred) / (np.max(y_true) - np.min(y_true))
+    rmse = rmse_loss(y_true, y_pred)
+    method = method.lower()
+
+    match method:
+        case 'mean':
+            denominator = y_true.mean()
+
+        case 'range':
+            denominator = y_true.max() - y_true.min()
+
+        case 'std':
+            denominator = y_true.std()
+
+        case 'iqr':
+            q_low, q_high = float(iqr_quantiles[0]), float(iqr_quantiles[1])
+
+            if not (0.0 <= q_low < q_high <= 100.0):
+                raise ValueError("iqr_quantiles must satisfy 0 <= low < high <= 100")
+            
+            denominator = np.percentile(y_true, q_high) - np.percentile(y_true, q_low)
+
+        case _:
+            raise ValueError(f"Unknown normalization method: {method}")
+
+    return rmse / denominator
+
+import numpy as np
+from typing import Iterable
+
+def all_values_real(a: Iterable) -> np.bool_:
+    """
+    Return True if every element of array-like `a` is a real, finite number.
+    Real means imag == 0 (for complex types). Finite means not NaN or ±Inf.
+    """
+    arr = np.asarray(a)
+
+    return np.isreal(arr).all() and np.isfinite(arr).all()
+
+import pandas as pd
+from typing import Callable, Optional
 
 def best_equation(
     model: PySRRegressor, 
@@ -95,42 +166,59 @@ def best_equation(
 
     # Assert that model.equations_ is a DataFrame
     assert isinstance(model.equations_, pd.DataFrame), "model.equations_ is not a DataFrame. The model may not be fitted yet."
+    
+    df_copy = model.equations_.copy()
+    mask = [False]*len(df_copy)
+    n_equations = len(df_copy)
 
-    n_equations = len(model.equations_)
-    temp_loss = np.inf
-
-    # Iterate over all equations and find the one with the lowest loss
-    # for idx in range(n_equations):
-    #     y_pred = model.predict(X, idx)
-    #     loss = loss_function(y, y_pred)
-
-    #     # Update best equation if current one has lower loss
-    #     if loss < temp_loss:
-
-    #         # Ensure the equation produces valid values
-    #         y_check_pred = model.predict(X_check, idx)
-    #         if np.any(np.isnan(y_check_pred)) or np.any(np.isinf(y_check_pred)) or not np.all(np.isreal(y_check_pred)): 
-    #             continue
-
-    #         temp_loss = loss
-    #         best_eq = model.equations_.iloc[idx]
-
-    eq = model.equations_.iloc[0]
-    model.equations_.sort_values(by='score', ascending=False, inplace=True)
     for idx in range(n_equations):
-        eq = model.equations_.iloc[idx]
-        y_check_pred = eq.lambda_format(X_check)
+        eq = df_copy.iloc[idx]
+        y_pred = eq.lambda_format(X)
 
-        if np.any(np.isnan(y_check_pred)) or np.any(np.isinf(y_check_pred)) or not np.all(np.isreal(y_check_pred)): 
-            continue
+        if all_values_real(y_pred):
+            if X_check is not None:
+                y_check_pred = eq.lambda_format(X_check)
 
-        # best_eq = eq
-        break
+                if not all_values_real(y_check_pred): continue
+            
+            mask[idx] = True
+            df_copy.at[idx, 'loss'] = loss_function(y, y_pred)
 
-    return eq#best_eq
+    df_copy = df_copy.loc[mask].copy()
+    df_copy.reset_index(drop=True, inplace=True)
+    mask = [False]*len(df_copy)
+    n_equations = len(df_copy)
+
+    mask[0] = True
+    min_loss = df_copy.at[0, 'loss']
+
+    for idx in range(1, n_equations):
+        current_loss = df_copy.at[idx, 'loss']
+
+        if current_loss <= min_loss: # type: ignore
+            mask[idx] = True
+            min_loss = current_loss
+    
+    df_copy = df_copy.loc[mask].copy()
+    df_copy.reset_index(drop=True, inplace=True)
+
+    n_equations = len(df_copy)
+
+    for idx in range(1, n_equations):
+        prev_loss = df_copy.at[idx-1, 'loss']
+        curr_loss = df_copy.at[idx, 'loss']
+
+        prev_complexity = df_copy.at[idx-1, 'complexity']
+        curr_complexity = df_copy.at[idx, 'complexity']
+
+        df_copy.at[idx, 'score'] = (np.log(prev_loss) - np.log(curr_loss)) / (curr_complexity - prev_complexity) # type: ignore
+
+    best_idx = df_copy['score'].idxmax()
+    return df_copy.loc[best_idx] #type: ignore
 
 def results_to_dataframe(
-    results: Dict[str, Dict[str, Dict[str, np.ndarray]]]
+    results: Dict[str, Dict[str, Dict[str, np.ndarray]]],
+    epochs: np.ndarray
 ) -> pd.DataFrame:
     """
     Converts a nested dictionary of results into a pandas DataFrame with a MultiIndex for columns.
@@ -146,16 +234,28 @@ def results_to_dataframe(
         DataFrame with MultiIndex columns (dataset, method, metric) and rows corresponding to runs.
     """
     
-    # Create a DataFrame with MultiIndex columns from the nested dictionary
-    df = pd.DataFrame({
-        (dataset_name, method, metric): values
+    data = {
+        (dataset_name, method, metric): [loss for losses in run_losses for loss in losses]
         for dataset_name, models in results.items()
         for method, metrics in models.items()
-        for metric, values in metrics.items()
-    })
+        for metric, run_losses  in metrics.items()
+    }
 
+    temp_results = results.copy()
+    while isinstance(temp_results, dict):
+        key = next(iter(temp_results))
+        temp_results = temp_results[key]
+    n_runs = len(temp_results)
+
+    row_index = pd.MultiIndex.from_tuples([
+        (run, epoch)
+        for run in range(n_runs)
+        for epoch in epochs
+    ], names=['run', 'epoch'])
+
+    df = pd.DataFrame(data, index=row_index)
     df.columns.names = ['dataset', 'method', 'metric'] # Name the column levels
-    df.index.name = "run" # Name the index (rows)
+
     return df
 
 def plot_results(
@@ -164,7 +264,8 @@ def plot_results(
     ncols: Optional[int] = None,
     group_level: str = "dataset",
     value_level: str = "metric",
-    value_key: str = "test_losses"
+    value_key: str = "training_losses",
+    plotting_function: Callable = sns.boxenplot
 ) -> tuple[Figure, np.ndarray]:
     """
     Plots boxenplots for a given pandas DataFrame with MultiIndex columns.
@@ -180,9 +281,11 @@ def plot_results(
     group_level : str, optional
         The column MultiIndex level to use for grouping subplots (default is "dataset").
      value_level : str, optional
-        The column MultiIndex level whose value (specified by `value_key`) will be plotted. 
+        The column MultiIndex level whose value (specified by `value_key`) will be plotted.
     value_key : str, optional
         The value in `value_level` to plot (default is "test_loss").
+    plotting_function : callable
+        A function that takes a DataFrame and an Axes object to create the plot (default is sns.boxenplot).
 
     Returns
     -------
@@ -191,14 +294,14 @@ def plot_results(
     axes : np.ndarray
         Array of matplotlib Axes objects.
     """
-    
+
     # Get unique group names from the specified MultiIndex level
     group_names = dataframe.columns.get_level_values(group_level).unique()
     n = len(group_names)
 
     # Set number of columns if not provided
     if ncols is None: ncols = n
-    
+
     # Create subplots
     fig, axes = plt.subplots(nrows, ncols, sharex=True)
 
@@ -213,9 +316,9 @@ def plot_results(
 
         # Select columns for the specified value_key in value_level
         df = df.xs(key=value_key, level=value_level, axis=1) # type: ignore
-        
+
         df.columns.name = None # Remove column name for clarity
-        sns.boxenplot(df, ax=ax) # type: ignore
+        plotting_function(data=df, ax=ax) # type: ignore
         ax.set_title(group_name)
 
     return fig, axes
@@ -582,3 +685,77 @@ def timeit(
         'std_time': np.std(times),
         'all_times': times,
     }
+
+def load_task_results(
+    directory: str
+) -> list:
+    """Load all .pkl task result files from a directory."""
+
+    results = []
+    for filename in os.listdir(directory):
+        if filename.endswith(".pkl"):
+            filepath = os.path.join(directory, filename)
+
+            with open(filepath, "rb") as f:
+                results.append(pickle.load(f))
+
+    return results
+
+def collect_results(
+    task_results: list, 
+    datasets: Dict, 
+    methods: Dict
+) -> Tuple[Dict, Dict, Dict]:
+    results = {}
+    equations = {}
+    features = {}
+
+    for dataset_name in datasets.keys():
+        results[dataset_name] = {}
+        equations[dataset_name] = {}
+        features[dataset_name] = {}
+
+        for method_name in methods.keys():
+            results[dataset_name][method_name] = {
+                "training_losses": [],
+                "validation_losses": [],
+                "test_losses": [],
+            }
+            equations[dataset_name][method_name] = []
+            features[dataset_name][method_name] = []
+
+    for result in task_results:
+        dataset_name = result['dataset_name']
+        method_name = result['method_name']
+        losses = result['losses']
+
+        results[dataset_name][method_name]["training_losses"].append(losses[0])
+        results[dataset_name][method_name]["validation_losses"].append(losses[1])   
+        results[dataset_name][method_name]["test_losses"].append(losses[2])
+
+        equations[dataset_name][method_name].append(result['equations'])
+        features[dataset_name][method_name].append(result['features'])
+
+    return results, equations, features
+
+def save_results(
+    df: pd.DataFrame, 
+    equations: Dict, 
+    features: Dict, 
+    prefix: str = "data"
+) -> str:
+    """Save results, equations, and features to a pickle file with a timestamped filename."""
+
+    data = {
+        'df': df,
+        'equations': equations,
+        'features': features
+    }
+
+    timestamp = datetime.datetime.now().strftime(r"%Y-%m-%d_%H-%M-%S")
+    filename = f"{prefix}_{timestamp}.pickle"
+
+    with open(filename, "wb") as f:
+        pickle.dump(data, f)
+
+    return filename
