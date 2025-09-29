@@ -142,79 +142,104 @@ def best_equation(
     X_check: Optional[pd.DataFrame] = None
 ) -> pd.Series:
     """
-    Selects the best equation from a PySRRegressor model based on 
-    the lowest value of the provided loss function on the given data.
+    Select the best equation from a fitted PySRRegressor.
+
+    Workflow
+    --------
+    - For each candidate equation in `model.equations_`:
+      - Evaluate `lambda_format(X)`. If any prediction is non-real or non-finite,
+        discard the equation.
+      - If `X_check` is provided, also require real and finite predictions on
+        `X_check`.
+      - Compute `loss = loss_function(y, y_pred)` and store it in the `'loss'`
+        column.
+    - Keep only the subset of equations that forms a strictly decreasing loss
+      frontier with respect to their original order (each kept row has a lower
+      loss than any previously kept row).
+    - For each consecutive pair on this frontier (i > 0), compute the score:
+          score_i = (log(loss_{i-1}) - log(loss_i)) / (complexity_i - complexity_{i-1})
+    - Return the row (equation) with the maximum score.
 
     Parameters
     ----------
     model : PySRRegressor
         Trained symbolic regression model.
-    X : DataFrame
-        Feature matrix to evaluate equations.
-    y : array-like
-        True target values.
-    loss_function : callable
-        Function to compute the loss between true and predicted values.
-    X_check: DataFrame, optional
-        Additional dataset to check if the equation produces real values.
+    X : pandas.DataFrame
+        Feature matrix used to evaluate candidate equations.
+    y : np.ndarray
+        True target values aligned with `X`.
+    loss_function : Callable[[np.ndarray, np.ndarray], float]
+        Function that computes a scalar loss between true and predicted values.
+    X_check : pandas.DataFrame, optional
+        Additional dataset on which candidate equations must also produce real,
+        finite predictions.
 
     Returns
     -------
-    best_eq : pandas.Series
-        The equation (row from model.equations_) with the lowest loss.
+    pandas.Series
+        The selected equation row from `model.equations_` (with computed `'loss'`
+        and `'score'` fields for the kept subset).
     """
 
-    # Assert that model.equations_ is a DataFrame
+    # Ensure that model.equations_ is a pandas DataFrame
     assert isinstance(model.equations_, pd.DataFrame), "model.equations_ is not a DataFrame. The model may not be fitted yet."
     
+    # Create a copy to avoid modifying the original
     df_copy = model.equations_.copy()
-    mask = [False]*len(df_copy)
-    n_equations = len(df_copy)
+    mask = [False]*len(df_copy) # Mask to track valid equations
 
-    for idx in range(n_equations):
+    # Evaluate each equation
+    for idx in range(len(df_copy)):
         eq = df_copy.iloc[idx]
         y_pred = eq.lambda_format(X)
 
+        # Check if all predicted values are real
         if all_values_real(y_pred):
+
+            # If X_check is provided, ensure predictions are real on that set too
             if X_check is not None:
                 y_check_pred = eq.lambda_format(X_check)
 
                 if not all_values_real(y_check_pred): continue
-            
+
+            # If all values are real, compute the loss
             mask[idx] = True
             df_copy.at[idx, 'loss'] = loss_function(y, y_pred)
 
-    df_copy = df_copy.loc[mask].copy()
-    df_copy.reset_index(drop=True, inplace=True)
-    mask = [False]*len(df_copy)
-    n_equations = len(df_copy)
+    # Filter out equations that did not produce real values
+    df_filtered = df_copy.loc[mask].copy().reset_index(drop=True)
+    mask2 = [True]+[False]*(len(df_filtered)-1) # Mask to track equations with decreasing loss
+    losses = df_filtered['loss'] # Extract losses
+    min_loss = losses.iloc[0] # Initialize minimum loss
 
-    mask[0] = True
-    min_loss = df_copy.at[0, 'loss']
+    # Select equations with strictly decreasing loss
+    for idx in range(1, len(df_filtered)):
+        current_loss = losses[idx]
 
-    for idx in range(1, n_equations):
-        current_loss = df_copy.at[idx, 'loss']
-
-        if current_loss <= min_loss: # type: ignore
-            mask[idx] = True
+        # If current loss is less than the minimum loss, keep it
+        if current_loss < min_loss:
+            mask2[idx] = True
             min_loss = current_loss
+
+    # Final filtering
+    df_final = df_filtered.loc[mask2].copy().reset_index(drop=True)
+
+    # Compute score based on loss improvement and complexity increase
+    for idx in range(1, len(df_final)):
+        prev_loss = df_final.at[idx-1, 'loss']
+        curr_loss = df_final.at[idx, 'loss']
+
+        prev_complexity = df_final.at[idx-1, 'complexity']
+        curr_complexity = df_final.at[idx, 'complexity']
+
+        df_final.at[idx, 'score'] = (np.log(prev_loss) - np.log(curr_loss)) / (curr_complexity - prev_complexity) # type: ignore
+
+    best_row_idx = df_final['score'].idxmax() # Find index of the best equation
+    best_row = df_final.loc[best_row_idx] # Get the best equation row
     
-    df_copy = df_copy.loc[mask].copy()
-    df_copy.reset_index(drop=True, inplace=True)
-
-    n_equations = len(df_copy)
-
-    for idx in range(1, n_equations):
-        prev_loss = df_copy.at[idx-1, 'loss']
-        curr_loss = df_copy.at[idx, 'loss']
-
-        prev_complexity = df_copy.at[idx-1, 'complexity']
-        curr_complexity = df_copy.at[idx, 'complexity']
-
-        df_copy.at[idx, 'score'] = (np.log(prev_loss) - np.log(curr_loss)) / (curr_complexity - prev_complexity) # type: ignore
-
-    best_idx = df_copy['score'].idxmax()
-    return df_copy.loc[best_idx] #type: ignore
+    # Ensure that best_row is a pandas Series.
+    assert isinstance(best_row, pd.Series), "Best row is not a Series."
+    return best_row 
 
 def results_to_dataframe(
     results: Dict[str, Dict[str, Dict[str, np.ndarray]]],
@@ -327,7 +352,7 @@ def train_val_test_split(
     X: pd.DataFrame,
     y: np.ndarray,
     test_size: float = 0.2,
-    val_size: float = 0.25
+    val_size: float = 0.2
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
     """
     Split the dataset into training, validation, and test sets.
@@ -339,9 +364,9 @@ def train_val_test_split(
     y : np.ndarray
         Target vector.
     test_size : float, optional
-     f data to use for testing (default: 0.2).
+        Proportion of data to use for testing (default: 0.2).
     val_size : float, optional
-        Proportion of remaining data to use for validation (default: 0.25).
+        Proportion of data to use for validation (default: 0.2).
 
     Returns
     -------
@@ -349,9 +374,11 @@ def train_val_test_split(
         Tuple containing (X_train, X_val, X_test, y_train, y_val, y_test).
     """
     
+    adjusted_val_size = val_size / (1 - test_size)  # Adjust validation size
+
     # Split the data into train/val/test sets
     X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_size)
-    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=val_size)
+    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=adjusted_val_size)
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -458,9 +485,6 @@ def fit_and_evaluate_best_equation(
     # Initialize the PySRRegressor with warm_start=True to allow iterative fitting
     model = PySRRegressor(warm_start=True, **pysr_params)
     model.set_params(niterations=record_interval) # Adjust the number of generations per interval
-    # model.set_params(should_simplify=False)
-    # model.set_params(verbosity=1)
-    # model.set_params(maxsize=28)
 
     # Iteratively fit the model and record losses at each interval
     for interval_idx in range(n_records):
@@ -485,7 +509,7 @@ def fit_and_evaluate_best_equation(
         y_ = np.concatenate([y_train, y_val], axis=0)
     
         a = len(X_val)/(len(X_train)+ len(X_val))
-        X_train, X_val, y_train, y_val = train_test_split(X_, y_, test_size=a, random_state=pysr_params['random_state'] if 'random_state' in pysr_params else None)
+        X_train, X_val, y_train, y_val = train_test_split(X_, y_, test_size=a)
 
     return training_losses, validation_losses, test_losses, best_eqs
 
@@ -586,10 +610,10 @@ def send_email(
     subject: str, 
     body_message: str, 
     sender_email: str, 
+    receiver_email: str,
     app_password: str, 
     smtp_server: str, 
     smtp_port: int, 
-    receiver_email: Optional[str] = None
 ):
     if receiver_email is None:
         receiver_email = sender_email
