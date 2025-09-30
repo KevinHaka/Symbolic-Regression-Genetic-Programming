@@ -33,8 +33,9 @@ class RFGP(BaseMethod):
         method_sig = signature(method_class)
         loss_function = method_params.get('loss_function', method_sig.parameters['loss_function'].default)
         record_interval = method_params.get('record_interval', method_sig.parameters['record_interval'].default)
+        resplit_interval = method_params.get('resplit_interval', method_sig.parameters['resplit_interval'].default)
 
-        super().__init__(loss_function, record_interval, pysr_params)
+        super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
         self.n_submodels = n_submodels
         self.method_class = method_class
         self.method_params = method_params

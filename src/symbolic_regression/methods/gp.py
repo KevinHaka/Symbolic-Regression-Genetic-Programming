@@ -9,8 +9,9 @@ from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
 class GP(BaseMethod):
     def __init__(
         self,
-        loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
-        record_interval: int = 1,
+        loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = nrmse_loss,
+        record_interval: Optional[int] = 1,
+        resplit_interval: Optional[int] = None,
         pysr_params: Optional[Dict[str, Any]] = None
     ) -> None:
         """
@@ -20,8 +21,10 @@ class GP(BaseMethod):
         ----------
         loss_function : Callable
             Function to compute the loss between true and predicted values.
-        record_interval : int
+        record_interval : Optional[int]
             Interval at which to record statistics.
+        resplit_interval : Optional[int]
+            Interval at which to resplit the training and validation sets.
         pysr_params : Dict
             Parameters for PySRRegressor.
         """
@@ -29,7 +32,7 @@ class GP(BaseMethod):
         if pysr_params is None:
             pysr_params = {}
 
-        super().__init__(loss_function, record_interval, pysr_params)
+        super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
 
     def run(
         self,
@@ -56,6 +59,7 @@ class GP(BaseMethod):
             train_val_test_set,
             self.loss_function,
             self.record_interval,
+            self.resplit_interval,
             self.pysr_params
         )
 

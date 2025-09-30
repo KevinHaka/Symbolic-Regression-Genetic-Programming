@@ -17,8 +17,9 @@ class GPSHAP(BaseMethod):
         val_size: float = signature(shap_sf).parameters['val_size'].default,
         n_runs: int = signature(shap_sf).parameters['n_runs'].default,
         n_top_features: int = signature(shap_sf).parameters['n_top_features'].default,
-        loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
-        record_interval: int = 1,
+        loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = nrmse_loss,
+        record_interval: Optional[int] = 1,
+        resplit_interval: Optional[int] = None,
         pysr_params: Optional[Dict[str, Any]] = None
     ):
         """
@@ -42,6 +43,8 @@ class GPSHAP(BaseMethod):
             Function to compute the loss between true and predicted values.
         record_interval : int
             Interval at which to record statistics.
+        resplit_interval : int
+            Interval at which to resplit the training and validation sets.
         pysr_params : Dict
             Parameters for PySRRegressor.
         """
@@ -49,7 +52,7 @@ class GPSHAP(BaseMethod):
         if pysr_params is None:
             pysr_params = {}
 
-        super().__init__(loss_function, record_interval, pysr_params)
+        super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
         self._feature_cache = Manager().dict()
         self.test_size = test_size
         self.val_size = val_size
@@ -169,6 +172,7 @@ class GPSHAP(BaseMethod):
             train_val_test_set_filtered,
             self.loss_function,
             self.record_interval,
+            self.resplit_interval,
             self.pysr_params
         )
 

@@ -14,8 +14,9 @@ class GPCMI(BaseMethod):
         ns: int = signature(cmi_sf).parameters['ns'].default,
         ci: float = signature(cmi_sf).parameters['ci'].default,
         k: int = signature(cmi_sf).parameters['k'].default,
-        loss_function: Callable[[np.ndarray, np.ndarray], float] = nrmse_loss,
-        record_interval: int = 1,
+        loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = nrmse_loss,
+        record_interval: Optional[int] = 1,
+        resplit_interval: Optional[int] = None,
         pysr_params: Optional[Dict[str, Any]] = None
     ) -> None:
         """
@@ -27,13 +28,14 @@ class GPCMI(BaseMethod):
             k (int): Number of neighbors for k-NN.
             loss_function (Callable): Function to calculate the loss.
             record_interval (int): Interval at which to record statistics.
+            resplit_interval (int): Interval at which to resplit the training and validation sets.
             pysr_params (Dict[str, Any]): Parameters for PySR.
         """
 
         if pysr_params is None:
             pysr_params = {}
 
-        super().__init__(loss_function, record_interval, pysr_params)
+        super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
         self.ns = ns
         self.ci = ci
         self.k = k
@@ -84,6 +86,7 @@ class GPCMI(BaseMethod):
             train_val_test_set_filtered,
             self.loss_function,
             self.record_interval,
+            self.resplit_interval,
             self.pysr_params
         )
 
