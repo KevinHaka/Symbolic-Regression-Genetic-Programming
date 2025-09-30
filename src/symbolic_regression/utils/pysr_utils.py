@@ -428,15 +428,13 @@ def fit_and_evaluate_best_equation(
         np.ndarray    # y_test
     ],
     loss_function: Callable,
-    record_interval: int = 1,
+    record_interval: Optional[int] = 1,
+    resplit_interval: Optional[int] = None,
     pysr_params: Dict[str, Any] = {}
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[pd.Series]]:
     """
-    Fit a symbolic regression model using PySR and evaluate its performance over multiple intervals.
-
-    This function trains a PySRRegressor on the provided training set, selects the best equation
-    based on validation loss at each recording interval, and computes the training, validation,
-    and test losses using the best equation found at each step.
+    Train a PySRRegressor iteratively (warm-start) and record losses using the
+    "best" discovered equation at configurable recording intervals.
 
     Parameters
     ----------
@@ -447,69 +445,99 @@ def fit_and_evaluate_best_equation(
     record_interval : int, optional
         Number of generations (iterations) between each recording of training, validation, and test losses.
         For example, if record_interval=2, losses are recorded every 2 generations. Default is 1.
+    resplit_interval : int, optional
+        Number of generations (iterations) between each resplitting of the training and validation sets.
+        For example, if resplit_interval=3, the training and validation sets are resplit every 3 generations.
     pysr_params : dict, optional
         Parameters to pass to PySRRegressor (default: None).
 
     Returns
     -------
     training_losses : np.ndarray
-        Array of training losses at each recording interval using the best equation.
+        Array of training losses at each recording interval using the best equation
     validation_losses : np.ndarray
         Array of validation losses at each recording interval using the best equation.
     test_losses : np.ndarray
         Array of test losses at each recording interval using the best equation.
     best_eqs : list[pd.Series]
         List of the best equations selected at each recording interval.
-
-    Notes
-    -----
-    The model is trained iteratively with warm_start=True, and at each interval the best equation
-    is selected based on validation loss.
     """
 
+    # Set default parameters if not provided
     if pysr_params is None: pysr_params = {}
-    best_eqs = []
 
-    # Determine the total number of iterations and how many times to record losses
+    # Total iterations from params
     niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
-    n_records = niterations // record_interval
+    
+    # Ensure niterations is an integer
+    assert isinstance(niterations, int), "niterations must be an integer."
 
-     # Initialize arrays to store losses at each interval
-    training_losses = np.empty(n_records)
-    validation_losses = np.empty(n_records)
-    test_losses = np.empty(n_records)
+    # Set default intervals if not provided
+    if record_interval is None: record_interval = niterations
+    if resplit_interval is None: resplit_interval = niterations
 
-    # Unpack the train/val/test sets
+    # Build event schedule
+    record_points = list(range(record_interval, niterations + 1, record_interval))
+    resplit_points = list(range(resplit_interval, niterations, resplit_interval))
+    events: Dict[int, set] = {}
+    for it in record_points: events.setdefault(it, set()).add("record")
+    for it in resplit_points: events.setdefault(it, set()).add("resplit")
+
+    # Arrays sized by number of record events
+    n_records = len(record_points)
+
+    # Initialize arrays to store losses at each interval
+    training_losses = np.empty(n_records, dtype=float)
+    validation_losses = np.empty(n_records, dtype=float)
+    test_losses = np.empty(n_records, dtype=float)
+    best_eqs = [] # To store the best equations at each recording interval
+
+    # Unpack the train/val/test splits
     X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_set
 
     # Initialize the PySRRegressor with warm_start=True to allow iterative fitting
     model = PySRRegressor(warm_start=True, **pysr_params)
-    model.set_params(niterations=record_interval) # Adjust the number of generations per interval
 
-    # Iteratively fit the model and record losses at each interval
-    for interval_idx in range(n_records):
-        # Fit the model for the current interval
-        model.fit(X_train, y_train)
+    prev_iter = 0 # To track the previous iteration count
+    record_idx = 0 # To track the index in the losses arrays
 
-        # Concatenate the training and test sets
-        X_check = pd.concat([X_train, X_test], ignore_index=True)
+    # Process events in chronological order
+    for it in sorted(events.keys()):
+        step = it - prev_iter # Number of iterations to run since last event
+        if step <= 0: print(f"Warning: Non-positive step size {step} at iteration {it}. Skipping.")
 
-        # Select the best equation based on validation loss
-        best_eq = best_equation(model, X_val, y_val, loss_function, X_check)
-        best_eqs.append(best_eq)
-        lambda_expr = best_eq.lambda_format 
+        model.set_params(niterations=step) # Update niterations for this step
+        model.fit(X_train, y_train) # Fit the model for the current step
+        
+        prev_iter = it # Update previous iteration count
+        actions = events[it] # Actions to perform at this iteration
 
-        # Compute losses on training, validation and test sets
-        training_losses[interval_idx] = loss_function(y_train, lambda_expr(X_train))
-        validation_losses[interval_idx] = loss_function(y_val, lambda_expr(X_val))
-        test_losses[interval_idx] = loss_function(y_test, lambda_expr(X_test))
+        # If recording is scheduled, evaluate and store losses
+        if "record" in actions:
+            # Concatenate the training and test sets
+            X_check = pd.concat([X_train, X_test], ignore_index=True)
 
-        # NOTE: Under testing lines
-        X_ = pd.concat([X_train, X_val], ignore_index=True)
-        y_ = np.concatenate([y_train, y_val], axis=0)
-    
-        a = len(X_val)/(len(X_train)+ len(X_val))
-        X_train, X_val, y_train, y_val = train_test_split(X_, y_, test_size=a)
+            # Select the best equation based on validation loss
+            best_eq = best_equation(model, X_val, y_val, loss_function, X_check)
+            best_eqs.append(best_eq)
+            lambda_expr = best_eq.lambda_format
+
+            # Compute losses on training, validation and test sets
+            training_losses[record_idx] = loss_function(y_train, lambda_expr(X_train))
+            validation_losses[record_idx] = loss_function(y_val, lambda_expr(X_val))
+            test_losses[record_idx] = loss_function(y_test, lambda_expr(X_test))
+            
+            record_idx += 1 # Increment record index
+
+        # If resplitting is scheduled, create new train/val splits
+        if "resplit" in actions:
+            # Concatenate the training and validation sets
+            X_train_val = pd.concat([X_train, X_val], ignore_index=True)
+            y_train_val = np.concatenate([y_train, y_val], axis=0)
+
+            # Compute adjusted validation size and split the data into new train/val sets
+            adjusted_val_size = len(y_val)/(len(y_train_val))
+            X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=adjusted_val_size)
 
     return training_losses, validation_losses, test_losses, best_eqs
 
