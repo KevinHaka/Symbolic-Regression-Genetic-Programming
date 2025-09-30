@@ -35,7 +35,12 @@ from symbolic_regression.utils.pysr_utils import (
 )
 
 # Suppress specific warnings
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+# warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings(
+    "ignore",
+    message="invalid value encountered in sqrt",
+    category=RuntimeWarning
+)
 
 def main(): 
     # Find the directory of the current script
@@ -49,27 +54,24 @@ def main():
     run_output_dir = os.path.join(data_dir, datetime.datetime.now().strftime(r"%Y%m%d%H%M%S"))
     os.makedirs(run_output_dir)
 
-    # create a log file
-    log_file = os.path.join(script_dir, "logfile.log") # NOTE: I am not sure I will need this
-    if os.path.exists(log_file): os.remove(log_file)
-
     # ---------------- Parameters ----------------
 
-    n_runs = 12
+    n_runs = 100
     test_size = 0.2
     val_size = 0.2
     n_top_features = None
     ns = 100
     ci = 0.99
     k = 5
-    record_interval = 5 # NOTE: I have to split the job that this parameter do in two variables
+    record_interval = 5
+    resplit_interval = 5
     n_submodels = 2
     num_workers = (os.cpu_count() or 2) // 2
-    threads_per_worker = 2
+    threads_per_worker = 4
 
     pysr_params = {
-        "populations": 2,
-        "population_size": 22,
+        "populations": 3,
+        "population_size": 33,
         "niterations": 100,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
@@ -98,6 +100,7 @@ def main():
     gp_params = {
         "loss_function": nrmse_loss,
         "record_interval": record_interval,
+        "resplit_interval": resplit_interval,
         "pysr_params": pysr_params,
     }
 
@@ -249,7 +252,7 @@ if __name__ == '__main__':
     time_parts = td_str.split('.')
 
     # Create message
-    message = f"Script finished running in {time_parts[0]} seconds."
+    message = f"Script finished running in {time_parts[0]} (H:MM:SS)"
     print(message)
 
     # Read email credentials from environment variables
