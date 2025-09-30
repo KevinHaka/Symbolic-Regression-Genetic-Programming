@@ -454,7 +454,7 @@ def fit_and_evaluate_best_equation(
     Returns
     -------
     training_losses : np.ndarray
-        Array of training losses at each recording interval using the best equation
+        Array of training losses at each recording interval using the best equation.
     validation_losses : np.ndarray
         Array of validation losses at each recording interval using the best equation.
     test_losses : np.ndarray
