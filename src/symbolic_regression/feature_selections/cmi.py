@@ -1,65 +1,127 @@
 import numpy as np
 import pandas as pd
 
+from ..utils.pysr_utils import permutation_test, temporary_seed
+
 from sklearn.preprocessing import StandardScaler
 from npeet import entropy_estimators as ee
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 def select_features(
     X: pd.DataFrame,
     y: np.ndarray,
-    ns: int = 1000,
-    ci: float = 0.99,
-    k: int = 5
+    n_permutations: int = 1000,
+    alpha: float = 0.01,
+    k_nearest_neighbors: int = 5,
+    random_state: Optional[int] = None
 ) -> Tuple[List[str], List[float]]:
-    
-    # Initialize algorithm state
-    scaler = StandardScaler()
-    remaining_features = list(X.columns)
-    cmi_values_selected_features = []
-    selected_features = []
+    """
+    Conditional Mutual Information (CMI) feature selection.
 
-    # Standardize data for stable MI estimation
-    # MI estimation via k-NN requires normalized features
-    X_scaled = scaler.fit_transform(X.copy())
-    y_scaled = scaler.fit_transform(y.copy().reshape(-1, 1))
-    X_scaled = pd.DataFrame(X_scaled, columns=remaining_features)
+    This module implements a greedy feature selection algorithm based on
+    conditional mutual information estimated with k-NN entropy estimators
+    (from the npeet package). At each step, it selects the remaining feature
+    that maximizes I(X_i; y | S), where S is the set of already selected
+    features, and uses a permutation (shuffle) test to decide when to stop.
 
-    # Greedy feature selection loop
-    while remaining_features:
-        cmi_per_feature = {}
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Feature matrix with shape (n_samples, n_features).
+    y : np.ndarray
+        Target vector with shape (n_samples,).
+    n_permutations : int, optional
+        Number of permutations to use in the shuffle test for significance (default: 1000).
+    alpha : float
+        Significance level for the permutation one-sided test (default: 0.01).
+    k_nearest_neighbors : int, optional
+        Number of neighbors used by the k-NN entropy estimators (default: 5).
+    random_state : Optional[int], optional
+        Random seed for reproducibility (default: None).
 
-        # Compute CMI for each remaining feature
-        for feature in remaining_features:
-            # Compute I(feature; target | selected_features)
-            # If no features selected yet, this is just I(feature; target)
-            cmi_per_feature[feature] = ee.mi(
-                X_scaled[feature], 
-                y_scaled, 
-                X_scaled[selected_features] if selected_features else None,
-                k=k
+    Returns
+    -------
+    Tuple[List[str], List[float]]
+        A tuple containing:
+        - selected_features: ordered list of selected feature names (strings),
+        - cmi_values_selected_features: corresponding estimated CMI values.
+    """
+
+    # Create a main RNG and global seed for reproducibility
+    if random_state is None:
+        global_seed = None
+        main_rng = None
+        perm_seed = None
+
+    else:
+        main_rng = np.random.default_rng(random_state)
+        global_seed = int(main_rng.integers(0, 2**32))
+
+    # Set random seed for reproducibility
+    with temporary_seed(global_seed):
+
+        # Initialize variables
+        remaining_features = list(X.columns)
+        cmi_values_selected_features = []
+        selected_features = []
+
+        # Standardize data for stable MI estimation
+        # MI estimation via k-NN requires normalized features
+        X_scaled = StandardScaler().fit_transform(X)
+        y_scaled = StandardScaler().fit_transform(y.reshape(-1, 1))
+        X_scaled = pd.DataFrame(X_scaled, columns=remaining_features)
+
+        # Initial CMI calculation parameters
+        cmi_kwargs = {'y': y_scaled, 'k': k_nearest_neighbors}
+
+        # Greedy feature selection loop
+        while remaining_features:
+            max_cmi = {} # Track feature with max CMI this iteration
+
+            # Compute CMI for each remaining feature
+            for feature in remaining_features:
+                
+                # Compute I(feature; target | selected_features)
+                # If no features selected yet, this is just I(feature; target)
+                current_cmi = ee.mi(
+                    x=X_scaled[feature], 
+                    y=y_scaled, 
+                    z=X_scaled[selected_features] if selected_features else None,
+                    k=k_nearest_neighbors
+                )
+                
+                # Track the feature with the highest CMI
+                # Update max CMI if current is greater
+                if not max_cmi or (current_cmi > max_cmi['value']):
+                    max_cmi = {'feature': feature, 'value': current_cmi}
+
+            # Update CMI calculation parameters
+            cmi_kwargs['z'] = X_scaled[selected_features] if selected_features else None
+
+            # Produce a new random seed for the permutation test
+            if main_rng is not None: perm_seed = int(main_rng.integers(0, 2**32))
+
+            # Perform a permutation test to see if max CMI is significant
+            # This tests the null hypothesis that I(feature; target | selected_features) = 0
+            res = permutation_test(
+                test_statistic = lambda data: ee.mi(x=data, **cmi_kwargs),
+                data =  X_scaled[max_cmi['feature']],
+                observed_statistic = max_cmi['value'],
+                n_permutations = n_permutations,
+                alpha = alpha,
+                alternative = 'greater',
+                decision_by = 'p_value',
+                random_state = perm_seed
             )
 
-        # Select feature with highest CMI
-        max_cmi_feature = max(cmi_per_feature.keys(), key=lambda k: cmi_per_feature[k])
-        max_cmi_value = cmi_per_feature[max_cmi_feature]
+            # Check if cmi is significant; if not, stop selection
+            if res['reject_null']:
 
-        _, (lower_bound, upper_bound) = ee.shuffle_test(
-            measure=ee.mi,
-            x=X_scaled[feature],
-            y=y_scaled,
-            z=X_scaled[selected_features].to_numpy().tolist() if selected_features else None,  # type: ignore
-            ns=ns,
-            ci=ci,
-            k=k
-        )
+                # Add selected feature to results and remove from candidates
+                selected_features.append(max_cmi['feature'])
+                cmi_values_selected_features.append(max_cmi['value'])
+                remaining_features.remove(max_cmi['feature'])
 
-        # Check if CMI is statistically significant
-        if lower_bound < max_cmi_value < upper_bound: break
-
-        # Add selected feature to results and remove from candidates
-        selected_features.append(max_cmi_feature)
-        cmi_values_selected_features.append(cmi_per_feature[max_cmi_feature])
-        remaining_features.remove(max_cmi_feature)
-    
-    return selected_features, cmi_values_selected_features
+            else: break
+        
+        return selected_features, cmi_values_selected_features
