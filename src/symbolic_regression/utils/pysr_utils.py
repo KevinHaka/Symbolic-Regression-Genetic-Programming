@@ -1,8 +1,11 @@
-# Libraries and modules
 import datetime
 import os
 import pickle
+import random
 import time
+
+from typing import Iterable
+from contextlib  import contextmanager
 
 import pandas as pd
 import numpy as np
@@ -119,9 +122,6 @@ def nrmse_loss(
 
     return rmse / denominator
 
-import numpy as np
-from typing import Iterable
-
 def all_values_real(a: Iterable) -> np.bool_:
     """
     Return True if every element of array-like `a` is a real, finite number.
@@ -130,9 +130,6 @@ def all_values_real(a: Iterable) -> np.bool_:
     arr = np.asarray(a)
 
     return np.isreal(arr).all() and np.isfinite(arr).all()
-
-import pandas as pd
-from typing import Callable, Optional
 
 def best_equation(
     model: PySRRegressor, 
@@ -352,7 +349,8 @@ def train_val_test_split(
     X: pd.DataFrame,
     y: np.ndarray,
     test_size: float = 0.2,
-    val_size: float = 0.2
+    val_size: float = 0.2,
+    random_state: Optional[int] = None
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
     """
     Split the dataset into training, validation, and test sets.
@@ -367,18 +365,27 @@ def train_val_test_split(
         Proportion of data to use for testing (default: 0.2).
     val_size : float, optional
         Proportion of data to use for validation (default: 0.2).
+    random_state : int or None, optional
+        Random seed for reproducibility.
 
     Returns
     -------
     tuple
         Tuple containing (X_train, X_val, X_test, y_train, y_val, y_test).
     """
+
+    # Set random seeds for reproducibility
+    if random_state is not None:
+        rng = np.random.default_rng(random_state)
+        rs1, rs2 = rng.integers(0, 2**32, size=2)
+    
+    else: rs1 = rs2 = None
     
     adjusted_val_size = val_size / (1 - test_size)  # Adjust validation size
 
     # Split the data into train/val/test sets
-    X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_size)
-    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=adjusted_val_size)
+    X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_size, random_state=rs1)
+    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=adjusted_val_size, random_state=rs2)
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -468,6 +475,10 @@ def fit_and_evaluate_best_equation(
 
     # Total iterations from params
     niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
+
+    # Random state for reproducibility
+    random_state = pysr_params.get("random_state", None)
+    rng = np.random.default_rng(random_state)
     
     # Ensure niterations is an integer
     assert isinstance(niterations, int), "niterations must be an integer."
@@ -537,7 +548,11 @@ def fit_and_evaluate_best_equation(
 
             # Compute adjusted validation size and split the data into new train/val sets
             adjusted_val_size = len(y_val)/(len(y_train_val))
-            X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=adjusted_val_size)
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_train_val, y_train_val, 
+                test_size=adjusted_val_size, 
+                random_state=rng.integers(0, 2**32)
+            )
 
     return training_losses, validation_losses, test_losses, best_eqs
 
@@ -811,3 +826,129 @@ def save_results(
         pickle.dump(data, f)
 
     return filename
+
+def permutation_test(
+    test_statistic: Callable,
+    data: pd.Series,
+    observed_statistic: Optional[float] = None,
+    n_permutations: int = 1000,
+    alpha: float = 0.05,
+    alternative: str = 'two-sided',
+    decision_by: str = 'p_value',
+    random_state: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Perform a permutation test for a univariate statistic.
+    
+    The p-value is computed using the Phipson & Smyth (2010, 
+    Permutation P-values should never be zero) adjustment.
+
+    Parameters
+    ----------
+    test_statistic : Callable
+        Function computing the test statistic given the data.
+    data : np.ndarray
+        Sample used to build the null distribution.
+    observed_statistic : float, optional
+        Precomputed observed statistic; if None it is evaluated from ``data``.
+    n_permutations : int, default=1000
+        Number of random permutations used to approximate the null distribution.
+    alpha : float, default=0.05
+        Significance level for confidence interval or p-value decision.
+    alternative : {'two-sided', 'greater', 'less'}, default='two-sided'
+        Alternative hypothesis controlling tail calculations.
+    decision_by : {'p_value', 'interval'}, default='p_value'
+        Whether to reject the null using the p-value or the confidence interval.
+    random_state : int, optional
+        Seed for the permutation generator.
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary with the following keys:
+        - 'observed_statistic': The observed statistic.
+        - 'null_distribution': The null distribution of the statistic.
+        - 'p_value': The computed p-value.
+        - 'reject_null': Boolean indicating whether to reject the null hypothesis.
+        - 'confidence_interval': The (lower, upper) bounds of the confidence interval.
+    """
+    
+    # Set seed for reproducibility
+    rng = np.random.default_rng(random_state)
+
+    # Calculate the observed statistic if not provided
+    if observed_statistic is None: observed_statistic = test_statistic(data)
+    assert isinstance(observed_statistic, float), "The observed statistic must be a numeric value."
+
+    # Generate the null distribution and sort it
+    null_distribution = np.array([
+        test_statistic(rng.permutation(data)) for _ in range(n_permutations)
+    ])
+    null_distribution.sort()
+
+    # Calculate p-value and confidence intervals based on the alternative hypothesis
+    match alternative:
+        case 'two-sided':
+            count_greater = np.sum(null_distribution >= observed_statistic)
+            count_less = np.sum(null_distribution <= observed_statistic)
+            p_value = 2 * min(
+                (count_greater + 1) / (n_permutations + 1),
+                (count_less + 1) / (n_permutations + 1)
+            )
+            p_value = min(1.0, p_value)   # clip to 1
+            lower_bound = np.quantile(null_distribution, alpha / 2)
+            upper_bound = np.quantile(null_distribution, 1 - alpha / 2)
+            reject_null = not (lower_bound < observed_statistic < upper_bound)
+
+        case 'greater':
+            count = np.sum(null_distribution >= observed_statistic)
+            p_value = (count + 1) / (n_permutations + 1)
+            lower_bound = None
+            upper_bound = np.quantile(null_distribution, 1 - alpha)
+            reject_null = observed_statistic >= upper_bound
+
+        case 'less':
+            count = np.sum(null_distribution <= observed_statistic)
+            p_value = (count + 1) / (n_permutations + 1)
+            lower_bound = np.quantile(null_distribution, alpha)
+            upper_bound = None
+            reject_null = observed_statistic <= lower_bound
+
+        case _:
+            raise ValueError("Alternative must be 'two-sided', 'greater', or 'less'.")
+        
+    # Decision based on p-value if specified
+    if decision_by == 'p_value': reject_null = p_value <= alpha
+
+    return {
+        "observed_statistic": observed_statistic,
+        "null_distribution": null_distribution,
+        "p_value": p_value,
+        "reject_null": reject_null,
+        "confidence_interval": (lower_bound, upper_bound)
+    }
+
+@contextmanager
+def temporary_seed(seed: Optional[int] = None):
+    """
+    Context manager that temporarily sets the global random seed for
+    both `numpy` (legacy RNG) and Python's `random` module,
+    and restores the previous state upon exit.
+    """
+
+    if seed is not None:
+        # Save current states
+        old_np_state = np.random.get_state()
+        old_random_state = random.getstate()
+        
+        # Set new seed
+        np.random.seed(seed)
+        random.seed(seed)
+        
+        try: yield
+        finally: # Restore previous states
+            np.random.set_state(old_np_state)
+            random.setstate(old_random_state)
+    
+    # If seed is None, do nothing
+    else: yield
