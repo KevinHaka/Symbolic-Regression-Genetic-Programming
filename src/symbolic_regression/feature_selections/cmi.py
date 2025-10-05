@@ -47,18 +47,14 @@ def select_features(
         - cmi_values_selected_features: corresponding estimated CMI values.
     """
 
-    # Create a main RNG and global seed for reproducibility
-    if random_state is None:
-        global_seed = None
-        main_rng = None
-        perm_seed = None
+    # Initialize random number generator
+    rng = np.random.default_rng(random_state)
 
-    else:
-        main_rng = np.random.default_rng(random_state)
-        global_seed = int(main_rng.integers(0, 2**32))
+    # Generate a temporary seed for reproducibility in nested functions
+    temp_seed = rng.integers(0, 2**32)
 
     # Set random seed for reproducibility
-    with temporary_seed(global_seed):
+    with temporary_seed(temp_seed):
 
         # Initialize variables
         remaining_features = list(X.columns)
@@ -102,7 +98,7 @@ def select_features(
             cmi_kwargs['z'] = X_scaled[selected_features] if selected_features else None
 
             # Produce a new random seed for the permutation test
-            if main_rng is not None: perm_seed = int(main_rng.integers(0, 2**32))
+            perm_seed = rng.integers(0, 2**32)
 
             # Perform a permutation test to see if max CMI is significant
             # This tests the null hypothesis that I(feature; target | selected_features) = 0

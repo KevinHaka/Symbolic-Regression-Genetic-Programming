@@ -375,11 +375,8 @@ def train_val_test_split(
     """
 
     # Set random seeds for reproducibility
-    if random_state is not None:
-        rng = np.random.default_rng(random_state)
-        rs1, rs2 = rng.integers(0, 2**32, size=2)
-    
-    else: rs1 = rs2 = None
+    rng = np.random.default_rng(random_state)
+    rs1, rs2 = rng.integers(0, 2**32, size=2)
     
     adjusted_val_size = val_size / (1 - test_size)  # Adjust validation size
 
