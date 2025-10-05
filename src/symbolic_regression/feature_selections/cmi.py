@@ -76,7 +76,10 @@ def select_features(
 
         # Greedy feature selection loop
         while remaining_features:
-            max_cmi = {} # Track feature with max CMI this iteration
+
+            # Track the feature with the highest CMI
+            best_feature = ""
+            best_value = -np.inf
 
             # Compute CMI for each remaining feature
             for feature in remaining_features:
@@ -90,10 +93,10 @@ def select_features(
                     k=k_nearest_neighbors
                 )
                 
-                # Track the feature with the highest CMI
                 # Update max CMI if current is greater
-                if not max_cmi or (current_cmi > max_cmi['value']):
-                    max_cmi = {'feature': feature, 'value': current_cmi}
+                if current_cmi > best_value:
+                    best_value = current_cmi
+                    best_feature = feature
 
             # Update CMI calculation parameters
             cmi_kwargs['z'] = X_scaled[selected_features] if selected_features else None
@@ -105,8 +108,8 @@ def select_features(
             # This tests the null hypothesis that I(feature; target | selected_features) = 0
             res = permutation_test(
                 test_statistic = lambda data: ee.mi(x=data, **cmi_kwargs),
-                data =  X_scaled[max_cmi['feature']],
-                observed_statistic = max_cmi['value'],
+                data = X_scaled[best_feature],
+                observed_statistic = best_value,
                 n_permutations = n_permutations,
                 alpha = alpha,
                 alternative = 'greater',
@@ -118,9 +121,9 @@ def select_features(
             if res['reject_null']:
 
                 # Add selected feature to results and remove from candidates
-                selected_features.append(max_cmi['feature'])
-                cmi_values_selected_features.append(max_cmi['value'])
-                remaining_features.remove(max_cmi['feature'])
+                selected_features.append(best_feature)
+                cmi_values_selected_features.append(best_value)
+                remaining_features.remove(best_feature)
 
             else: break
         
