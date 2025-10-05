@@ -92,7 +92,7 @@ def select_features(
                     z=X_scaled[selected_features] if selected_features else None,
                     k=k_nearest_neighbors
                 )
-                
+            
                 # Update max CMI if current is greater
                 if current_cmi > best_value:
                     best_value = current_cmi
