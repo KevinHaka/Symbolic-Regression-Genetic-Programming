@@ -251,6 +251,7 @@ def _generate_F1_dataset(
     y : np.ndarray
         Target values with shape (n_samples,). Gravitational force values.
     """
+    
     # Set random seed for reproducibility
     rng = np.random.default_rng(random_state)
     
