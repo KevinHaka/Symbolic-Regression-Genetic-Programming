@@ -27,11 +27,13 @@ class BaseMethod(ABC):
             pysr_params: parameters for PySRRegressor
         """
 
+        # Store parameters
         self.loss_function = loss_function
         self.record_interval = record_interval
         self.resplit_interval = resplit_interval
         self.pysr_params = pysr_params
 
+        # Determine number of records based on niterations and record_interval
         niterations = self.pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
         self.n_records = niterations // self.record_interval
 
