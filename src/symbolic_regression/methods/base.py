@@ -38,13 +38,28 @@ class BaseMethod(ABC):
         self.n_records = niterations // self.record_interval
 
     @abstractmethod
-    def run(self, *args, **kwargs) -> Tuple[
+    def run(
+        self,
+        train_val_test_set: Tuple[
+            pd.DataFrame,  # X_train
+            pd.DataFrame,  # X_val
+            pd.DataFrame,  # X_test
+            np.ndarray,    # y_train
+            np.ndarray,    # y_val
+            np.ndarray     # y_test
+        ],
+        random_state: Optional[int] = None
+    ) -> Tuple[
         Tuple[np.ndarray, np.ndarray, np.ndarray],  # training, validation, test losses
         List[pd.Series],                            # best-equation objects
         List[str],                                  # feature names
     ]:
         """
         Run the symbolic regression method.
+
+        Args:
+            train_val_test_set: tuple of (X_train, X_val, X_test, y_train, y_val, y_test)
+            random_state: random seed for reproducibility.
         """
 
         raise NotImplementedError

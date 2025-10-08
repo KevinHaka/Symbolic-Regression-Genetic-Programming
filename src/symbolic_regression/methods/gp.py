@@ -15,7 +15,7 @@ class GP(BaseMethod):
         pysr_params: Optional[Dict[str, Any]] = None
     ) -> None:
         """
-        Initialize the GP method with loss function, record interval, and PySR parameters.
+        Genetic Programming (GP) method using PySR.
 
         Parameters
         ----------
@@ -29,8 +29,7 @@ class GP(BaseMethod):
             Parameters for PySRRegressor.
         """
 
-        if pysr_params is None:
-            pysr_params = {}
+        if pysr_params is None: pysr_params = {}
 
         super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
 
@@ -44,6 +43,7 @@ class GP(BaseMethod):
             np.ndarray,    # y_val
             np.ndarray     # y_test
         ],
+        random_state: Optional[int] = None
     ) -> Tuple[
         Tuple[np.ndarray, np.ndarray, np.ndarray],  # training, validation, test losses
         List[pd.Series],                            # best-equation objects
@@ -51,10 +51,27 @@ class GP(BaseMethod):
     ]:
         """
         Execute one full train/validation/test run using GP.
+
+        Parameters
+        ----------
+        train_val_test_set : Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]
+            The training, validation, and test sets.
+        random_state : Optional[int], optional
+            Random seed, but it is not used since PySR has its own random state handling.
+            It is included for API consistency.
+        
+        Returns
+        -------
+        Tuple containing:
+            - training, validation, and test losses (each as np.ndarray),
+            - list of best-equation objects (pd.Series),
+            - list of feature names (List[str]).
         """
 
-        features = train_val_test_set[0].columns.tolist()
+        # Extract feature names
+        features = train_val_test_set[0].columns.tolist() 
         
+        # Fit and evaluate the best equation using PySR
         training_losses, validation_losses, test_losses, best_eqs = fit_and_evaluate_best_equation(
             train_val_test_set,
             self.loss_function,
