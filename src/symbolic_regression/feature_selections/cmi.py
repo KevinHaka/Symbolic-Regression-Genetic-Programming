@@ -50,11 +50,8 @@ def select_features(
     # Initialize random number generator
     rng = np.random.default_rng(random_state)
 
-    # Generate a temporary seed for reproducibility in nested functions
-    temp_seed = rng.integers(0, 2**32)
-
     # Set random seed for reproducibility
-    with temporary_seed(temp_seed):
+    with temporary_seed(int(rng.integers(0, 2**32))):
 
         # Initialize variables
         remaining_features = list(X.columns)
@@ -97,9 +94,6 @@ def select_features(
             # Update CMI calculation parameters
             cmi_kwargs['z'] = X_scaled[selected_features] if selected_features else None
 
-            # Produce a new random seed for the permutation test
-            perm_seed = rng.integers(0, 2**32)
-
             # Perform a permutation test to see if max CMI is significant
             # This tests the null hypothesis that I(feature; target | selected_features) = 0
             res = permutation_test(
@@ -110,7 +104,7 @@ def select_features(
                 alpha = alpha,
                 alternative = 'greater',
                 decision_by = 'p_value',
-                random_state = perm_seed
+                random_state = rng.integers(0, 2**32)
             )
 
             # Check if cmi is significant; if not, stop selection
