@@ -35,14 +35,19 @@ from symbolic_regression.utils.pysr_utils import (
 )
 
 # Suppress specific warnings
-# warnings.filterwarnings("ignore", category=RuntimeWarning)
-warnings.filterwarnings(
-    "ignore",
-    message="invalid value encountered in sqrt",
-    category=RuntimeWarning
-)
+# warnings.filterwarnings(
+#     action="ignore",
+#     category=RuntimeWarning,
+#     module=r"lambdifygenerated.*"
+# )
+messages_to_ignore = [
+    r"invalid value encountered in .*",
+    r"divide by zero encountered in .*",
+]
+for message in messages_to_ignore:
+    warnings.filterwarnings("ignore", message=message, category=RuntimeWarning)
 
-def main(): 
+def main() -> None: 
     # Find the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -51,28 +56,36 @@ def main():
     os.makedirs(data_dir, exist_ok=True)
 
     # create a unique output directory for this run
-    run_output_dir = os.path.join(data_dir, datetime.datetime.now().strftime(r"%Y%m%d%H%M%S"))
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_output_dir = os.path.join(data_dir, timestamp)
     os.makedirs(run_output_dir)
 
     # ---------------- Parameters ----------------
 
-    n_runs = 100
+    # For GPSHAP
+    n_top_features = None
+
+    # For GPCMI
+    n_permutations = 100
+    alpha = 0.01 # Significance level for one-sided test
+    k_nearest_neighbors = 5
+
+    # For RFGP
+    n_submodels = 2
+
+    # General
+    n_runs = 24
     test_size = 0.2
     val_size = 0.2
-    n_top_features = None
-    ns = 100
-    ci = 0.99
-    k = 5
-    record_interval = 5
-    resplit_interval = 5
-    n_submodels = 2
-    num_workers = (os.cpu_count() or 2) // 2
-    threads_per_worker = 4
+    record_interval = 10
+    resplit_interval = None
+    num_workers = os.cpu_count()
+    threads_per_worker = 2
 
     pysr_params = {
-        "populations": 3,
-        "population_size": 33,
-        "niterations": 100,
+        "populations": 2,
+        "population_size": 20,
+        "niterations": 60,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {
@@ -84,6 +97,7 @@ def main():
         "input_stream": 'devnull',
         "parallelism": "serial",
         "deterministic": False,
+        "random_state": None
     }
 
     # Choose datasets to run
@@ -113,9 +127,9 @@ def main():
     }
 
     gpcmi_params = {
-        "ns": ns,
-        "ci": ci,
-        "k": k,
+        "n_permutations": n_permutations,
+        "alpha": alpha,
+        "k_nearest_neighbors": k_nearest_neighbors,
         **gp_params
     }
 
@@ -129,7 +143,7 @@ def main():
         "GP": GP(**gp_params),
         "GPSHAP": GPSHAP(**gpshap_params),
         "GPCMI": GPCMI(**gpcmi_params),
-    	"RFGPCMI": RFGP(**rfgpcmi_params),
+    	# "RFGPCMI": RFGP(**rfgpcmi_params),
     }
 
     # Get number of iterations from one of the methods
@@ -258,21 +272,22 @@ if __name__ == '__main__':
     # Read email credentials from environment variables
     sender_email = os.getenv("EMAIL_SENDER")
     app_password = os.getenv("EMAIL_APP_PASSWORD")
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = os.getenv("SMTP_PORT")
 
     # Send email notification if credentials are available
-    if sender_email and app_password:
+    if sender_email and app_password and smtp_server and smtp_port:
         send_email(
             subject="Script Finished Running",
             body_message=message,
             sender_email=sender_email,
             receiver_email=sender_email,
             app_password=app_password,
-            smtp_server="smtp.gmail.com",
-            smtp_port=465,
-    )
-        
+            smtp_server=smtp_server,
+            smtp_port=int(smtp_port),
+        )
+        print("Email notification sent successfully.")
+
     else:
         print("Email credentials not found in environment variables.")
         print("Skipping email notification.")
-
-    
