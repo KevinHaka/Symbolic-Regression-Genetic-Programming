@@ -374,15 +374,22 @@ def train_val_test_split(
         Tuple containing (X_train, X_val, X_test, y_train, y_val, y_test).
     """
 
-    # Set random seeds for reproducibility
+    # Initialize random number generator
     rng = np.random.default_rng(random_state)
-    rs1, rs2 = rng.integers(0, 2**32, size=2)
     
     adjusted_val_size = val_size / (1 - test_size)  # Adjust validation size
 
     # Split the data into train/val/test sets
-    X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_size, random_state=rs1)
-    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=adjusted_val_size, random_state=rs2)
+    X_train_val, X_test, y_train_val, y_test = train_test_split(
+        X, y, 
+        test_size=test_size, 
+        random_state=rng.integers(0, 2**32)
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_val, y_train_val, 
+        test_size=adjusted_val_size, 
+        random_state=rng.integers(0, 2**32)
+    )
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -895,27 +902,40 @@ def permutation_test(
             p_value = min(1.0, p_value)   # clip to 1
             lower_bound = np.quantile(null_distribution, alpha / 2)
             upper_bound = np.quantile(null_distribution, 1 - alpha / 2)
-            reject_null = not (lower_bound < observed_statistic < upper_bound)
 
         case 'greater':
             count = np.sum(null_distribution >= observed_statistic)
             p_value = (count + 1) / (n_permutations + 1)
             lower_bound = None
             upper_bound = np.quantile(null_distribution, 1 - alpha)
-            reject_null = observed_statistic >= upper_bound
 
         case 'less':
             count = np.sum(null_distribution <= observed_statistic)
             p_value = (count + 1) / (n_permutations + 1)
             lower_bound = np.quantile(null_distribution, alpha)
             upper_bound = None
-            reject_null = observed_statistic <= lower_bound
 
         case _:
             raise ValueError("Alternative must be 'two-sided', 'greater', or 'less'.")
         
-    # Decision based on p-value if specified
-    if decision_by == 'p_value': reject_null = p_value <= alpha
+    # Decide whether to reject the null hypothesis
+    match decision_by:
+        case 'p_value': reject_null = p_value <= alpha
+        case 'interval':
+            match alternative:
+                case 'two-sided':
+                    assert lower_bound is not None and upper_bound is not None
+                    reject_null = not (lower_bound < observed_statistic < upper_bound)
+                
+                case 'greater':
+                    assert upper_bound is not None
+                    reject_null = observed_statistic >= upper_bound
+                
+                case 'less':
+                    assert lower_bound is not None
+                    reject_null = observed_statistic <= lower_bound
+        
+        case _: raise ValueError("decision_by must be 'p_value' or 'interval'.")
 
     return {
         "observed_statistic": observed_statistic,
