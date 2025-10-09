@@ -49,24 +49,29 @@ class GPSHAP(BaseMethod):
             Parameters for PySRRegressor.
         """
 
-        if pysr_params is None:
-            pysr_params = {}
+        # Set default PySR parameters if none provided
+        if pysr_params is None: pysr_params = {}
 
         super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
-        self._feature_cache = Manager().dict()
+        self._feature_cache = Manager().dict() # Cache for storing selected features
         self.test_size = test_size
         self.val_size = val_size
         self.n_runs = n_runs
         self.n_top_features = n_top_features
 
     @staticmethod
-    def _get_dataset_key(X: pd.DataFrame) -> Tuple[str, ...]:
+    def _get_dataset_key(
+        X: pd.DataFrame
+    ) -> Tuple[str, ...]:
+        """ Generate a unique key for the dataset based on its feature names. """
+
         return tuple(sorted(X.columns))
     
     def precompute_features(
         self, 
         X: pd.DataFrame, 
         y: np.ndarray,
+        random_state: Optional[int] = None
     ) -> List[str]:
         """
         Precompute and cache the selected features using SHAP.
@@ -74,25 +79,42 @@ class GPSHAP(BaseMethod):
         Args:
             X (pd.DataFrame): Feature DataFrame.
             y (np.ndarray): Target variable.
+            random_state (Optional[int]): Random seed for reproducibility.
         
         Returns:
             List[str]: List of selected feature names.
         """
 
+        # Get a unique key for the dataset to cache features
         dataset_key = self._get_dataset_key(X)
 
+        # If features not cached, compute and store them
         if dataset_key not in self._feature_cache:
+
+            # Create a random number generator
+            rng = np.random.default_rng(random_state)
+
+            gp_params = {
+                "loss_function": self.loss_function,
+                "record_interval": self.record_interval,
+                "resplit_interval": self.resplit_interval,
+                "pysr_params": self.pysr_params
+            }
+
+            # Compute selected features using SHAP
             selected_features, _ = shap_sf(
                 X, y,
                 test_size=self.test_size,
                 val_size=self.val_size,
                 n_runs=self.n_runs,
                 n_top_features=self.n_top_features,
-                loss_function=self.loss_function,
-                record_interval=self.record_interval,
-                **self.pysr_params
+                random_state=rng.integers(0, 2**32),
+                gp_params=gp_params
             )
+
+            # Cache the selected features
             self._feature_cache[dataset_key] = selected_features
+
         else:
             selected_features = self._feature_cache[dataset_key]
 
@@ -102,7 +124,8 @@ class GPSHAP(BaseMethod):
         self,
         X_trains: Tuple[pd.DataFrame],
         gp_equations: List[pd.Series],
-        n_top_features: Optional[int] = None
+        n_top_features: Optional[int] = None,
+        random_state: Optional[int] = None
     ) -> List[str]:
         """
         Precompute and cache the selected features from pretrained GP models.
@@ -111,16 +134,32 @@ class GPSHAP(BaseMethod):
             X_trains (Tuple[pd.DataFrame]): Tuple of training DataFrames.
             gp_equations (List[pd.Series]): List of GP equations.
             n_top_features (Optional[int]): Number of top features to select.
+            random_state (Optional[int]): Random seed for reproducibility.
 
         Returns:
             List[str]: List of selected feature names.
         """
 
+        # Get a unique key for the dataset to cache features
         dataset_key = self._get_dataset_key(X_trains[0])
 
+        # If features not cached, compute and store them
         if dataset_key not in self._feature_cache:
-            selected_features, _ = shap_pretrained_sf(X_trains, gp_equations, n_top_features)
+
+            # Create a random number generator
+            rng = np.random.default_rng(random_state)
+
+            # Compute selected features using SHAP from pretrained models
+            selected_features, _ = shap_pretrained_sf(
+                X_trains,
+                gp_equations,
+                n_top_features=n_top_features,
+                random_state=rng.integers(0, 2**32)
+            )
+
+            # Cache the selected features
             self._feature_cache[dataset_key] = selected_features
+
         else:
             selected_features = self._feature_cache[dataset_key]
 
@@ -135,24 +174,38 @@ class GPSHAP(BaseMethod):
             np.ndarray,    # y_train
             np.ndarray,    # y_val
             np.ndarray     # y_test
-        ]
+        ],
+        random_state: Optional[int] = None
     ) -> Tuple[
         Tuple[np.ndarray, np.ndarray, np.ndarray],  # training, validation, test losses
         List[pd.Series],                            # best-equation objects
         List[str],                                  # feature names
     ]:
-        """ Execute one full train/validation/test run using GP and SHAP."""
+        """ Execute one full train/validation/test run using GP and SHAP.
 
+        Args:
+            train_val_test_set: Tuple containing training, validation, and test sets.
+            random_state: Random seed for reproducibility.
+        """
+
+        # Unpack the sets
         X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_set
 
         # Get a unique key for the dataset to cache features
         dataset_key = self._get_dataset_key(X_train)
 
+        # If features not cached, compute and store them
         if dataset_key not in self._feature_cache.keys():
+
+            # Create a random number generator
+            rng = np.random.default_rng(random_state)
+
+            # Combine all data for feature selection
             X = pd.concat([X_train, X_val, X_test], ignore_index=True)
             y = np.concatenate([y_train, y_val, y_test])
-            selected_features = self.precompute_features(X, y)
-            self._feature_cache[dataset_key] = selected_features
+
+            # Precompute and cache selected features
+            selected_features = self.precompute_features(X, y, rng.integers(0, 2**32))
 
         else:
             selected_features = self._feature_cache[dataset_key]
