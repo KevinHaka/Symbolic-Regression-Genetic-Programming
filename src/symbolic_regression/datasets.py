@@ -9,6 +9,10 @@ from ucimlrepo import fetch_ucirepo, dotdict
 
 # List all available datasets
 def list_available_datasets() -> List[str]:
+    """
+    List all available datasets in the registry.
+    """
+    
     return sorted(_DATASET_REGISTRY.keys())
 
 # Custom dataset loading functions
