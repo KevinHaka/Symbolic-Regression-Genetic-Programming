@@ -7,6 +7,7 @@ load_dotenv(find_dotenv())
 import datetime
 import warnings
 from numpy import arange
+from numpy.random import default_rng
 
 from dask.delayed import delayed
 from dask.base import compute
@@ -35,11 +36,6 @@ from symbolic_regression.utils.pysr_utils import (
 )
 
 # Suppress specific warnings
-# warnings.filterwarnings(
-#     action="ignore",
-#     category=RuntimeWarning,
-#     module=r"lambdifygenerated.*"
-# )
 messages_to_ignore = [
     r"invalid value encountered in .*",
     r"divide by zero encountered in .*",
@@ -47,7 +43,9 @@ messages_to_ignore = [
 for message in messages_to_ignore:
     warnings.filterwarnings("ignore", message=message, category=RuntimeWarning)
 
+# Main function
 def main() -> None: 
+
     # Find the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -74,18 +72,34 @@ def main() -> None:
     n_submodels = 2
 
     # General
-    n_runs = 24
+    n_runs = 30
     test_size = 0.2
     val_size = 0.2
     record_interval = 10
-    resplit_interval = None
+    resplit_interval = 10
     num_workers = os.cpu_count()
     threads_per_worker = 2
+    random_state = None
 
+    # Set random seed for reproducibility
+    rng = default_rng(random_state)
+
+    # Choose datasets to run
+    dataset_names = [
+        "F1",
+        # "F2",
+        # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
+        # "505_tecator",
+    	# ("Communities and Crime", "CCN"),
+        ("Communities and Crime Unnormalized", "CCUN"),   
+    ]
+    datasets = load_datasets(dataset_names) # Load datasets
+
+    # PySR parameters
     pysr_params = {
         "populations": 2,
         "population_size": 20,
-        "niterations": 60,
+        "niterations": 50,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {
@@ -96,21 +110,11 @@ def main() -> None:
         "verbosity": 0,
         "input_stream": 'devnull',
         "parallelism": "serial",
-        "deterministic": False,
-        "random_state": None
+        "deterministic": False if random_state is None else True,
+        # "random_state": None
     }
 
-    # Choose datasets to run
-    dataset_names = [
-        "F1",
-        # "F2",
-        # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
-        # "505_tecator",
-    	# ("Communities and Crime", "CCN"),
-        # ("Communities and Crime Unnormalized", "CCUN"),   
-    ]
-    datasets = load_datasets(dataset_names) # Load datasets
-
+    # GP method parameters
     gp_params = {
         "loss_function": nrmse_loss,
         "record_interval": record_interval,
@@ -118,6 +122,7 @@ def main() -> None:
         "pysr_params": pysr_params,
     }
 
+    # GPSHAP method parameters
     gpshap_params = {
         "test_size": test_size,
         "val_size": val_size,
@@ -126,6 +131,7 @@ def main() -> None:
         **gp_params,
     }
 
+    # GPCMI method parameters
     gpcmi_params = {
         "n_permutations": n_permutations,
         "alpha": alpha,
@@ -133,6 +139,7 @@ def main() -> None:
         **gp_params
     }
 
+    # RFGPCMI method parameters
     rfgpcmi_params = {
         "n_submodels": n_submodels,
         "method_class": GPCMI,
@@ -143,7 +150,7 @@ def main() -> None:
         "GP": GP(**gp_params),
         "GPSHAP": GPSHAP(**gpshap_params),
         "GPCMI": GPCMI(**gpcmi_params),
-    	# "RFGPCMI": RFGP(**rfgpcmi_params),
+    	"RFGPCMI": RFGP(**rfgpcmi_params),
     }
 
     # Get number of iterations from one of the methods
@@ -164,7 +171,11 @@ def main() -> None:
         y = dataset["y"] # Target
 
         # Create delayed tasks for data splits
-        delayed_splits = [delayed(train_val_test_split, pure=False)(X, y, test_size, val_size) for _ in range(n_runs)]
+        delayed_splits = [
+            delayed(train_val_test_split, pure=False)(
+                X, y, test_size, val_size, rng.integers(0, 2**32)
+            ) for _ in range(n_runs)
+        ]
         
         # Iterate over methods
         for method_name, method in methods.items():
@@ -185,7 +196,8 @@ def main() -> None:
                         delayed_splits[run], 
                         method, 
                         run_output_dir, 
-                        return_results
+                        return_results,
+                        rng.integers(0, 2**32)
                     )
                 )
         
@@ -200,12 +212,12 @@ def main() -> None:
 
                 # Use GP's equations for GPSHAP
                 delayed_precomputed_features_task = delayed(methods["GPSHAP"].precompute_features_from_pretrained_models)(
-                    delayed_X_trains, delayed_gp_equations, n_top_features
+                    delayed_X_trains, delayed_gp_equations, n_top_features, rng.integers(0, 2**32)
                 )
 
             else:
                 # Use current dataset for GPSHAP
-                delayed_precomputed_features_task = delayed(methods["GPSHAP"].precompute_features)(X, y)
+                delayed_precomputed_features_task = delayed(methods["GPSHAP"].precompute_features)(X, y, rng.integers(0, 2**32))
 
             # Create delayed tasks for each GPSHAP run
             for run in range(n_runs):
@@ -218,6 +230,7 @@ def main() -> None:
                         methods["GPSHAP"], 
                         run_output_dir, 
                         False, 
+                        rng.integers(0, 2**32),
                         delayed_precomputed_features_task
                     )
                 )
