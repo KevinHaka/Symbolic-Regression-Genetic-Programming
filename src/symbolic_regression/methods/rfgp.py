@@ -24,9 +24,10 @@ class RFGP(BaseMethod):
             method_params (Optional[Dict[str, Any]]): Parameters for the sub-method.
         """
 
-        if method_params is None:
-            method_params = {}
+        # Set default method parameters if none provided
+        if method_params is None: method_params = {}
 
+        # Extract pysr_params if provided, else set to empty dict
         pysr_params = method_params.get('pysr_params', {})
 
         # Get the signature of the method class to extract default parameters
@@ -58,15 +59,32 @@ class RFGP(BaseMethod):
             np.ndarray,       # y_val
             np.ndarray        # y_test
         ],
+        random_state: Optional[int] = None
     ) -> Tuple[
         Tuple[np.ndarray, np.ndarray, np.ndarray],  # training, validation, test losses
         List[List[pd.Series]],                      # best-equation objects for each submodel
         List[List[str]],                            # list of feature names for each submodel
     ]:
-        """ Execute one full train/validation/test run using RFGP."""
+        """ Execute one full train/validation/test run using RFGP.
 
+        Args:
+            train_val_test_set: Tuple containing training, validation, and test sets.
+            random_state: Random seed for reproducibility.
+
+        Returns:
+            Tuple containing:
+                - Tuple of arrays with training, validation, and test losses at each record interval.
+                - List of lists containing best-equation objects for each submodel.
+                - List of lists containing feature names used by each submodel.
+        """
+
+        # Set random seed for reproducibility
+        rng = np.random.default_rng(random_state) 
+
+        # Unpack the sets
         X_train_orig, X_val_orig, X_test_orig, y_train_orig, y_val_orig, y_test_orig = train_val_test_set
         
+        # Initialize residuals as original targets
         y_train_residual = y_train_orig.copy()
         y_val_residual = y_val_orig.copy()
         y_test_residual = y_test_orig.copy()
@@ -76,6 +94,7 @@ class RFGP(BaseMethod):
         validation_losses = np.zeros(self.n_records)
         test_losses = np.zeros(self.n_records)
         
+        # To hold results from all submodels
         all_best_eqs = []
         all_selected_features = []
         lambda_models_per_interval = []
@@ -84,9 +103,13 @@ class RFGP(BaseMethod):
         # Prepare the method
         method = self.method_class(**self.method_params)
 
+        # Track the starting index for each submodel's records
         current_interval_start = 0
 
+        # Fit each submodel sequentially
         for sub_i in range(self.n_submodels):
+
+            # Number of records to fit for this submodel
             n_records_for_this_submodel = self.records_per_submodel[sub_i]
             if n_records_for_this_submodel == 0: continue
 
@@ -100,17 +123,23 @@ class RFGP(BaseMethod):
             )
 
             # Run the sub-method
-            _, sub_best_eqs, sub_features = method.run(current_train_val_test_set)
+            _, sub_best_eqs, sub_features = method.run(current_train_val_test_set, rng.integers(0, 2**32))
 
+            # Store results
             all_best_eqs.append(sub_best_eqs)
             all_selected_features.append(sub_features)
 
-            # Update residuals and calculate cumulative losses
+            # Determine the start and end indices for this submodel's records
             start_interval = current_interval_start
             end_interval = start_interval + n_records_for_this_submodel
 
+            # Update lambda models and losses for each interval
             for j, interval_idx in enumerate(range(start_interval, end_interval)): 
+
+                # Create new model component for this interval
                 new_model_component = (sub_best_eqs[j].lambda_format, sub_features)
+
+                # Update the list of lambda models
                 lambda_models_per_interval.append(prev_best_lambda_models.copy())
                 lambda_models_per_interval[interval_idx].append(new_model_component)
 
@@ -119,23 +148,28 @@ class RFGP(BaseMethod):
                 y_val_pred = cumulative_lambda(X_val_orig, lambda_models_per_interval[interval_idx])
                 y_test_pred = cumulative_lambda(X_test_orig, lambda_models_per_interval[interval_idx])
 
+                # Compute and store losses
                 training_losses[interval_idx] = self.loss_function(y_train_orig, y_train_pred)
                 validation_losses[interval_idx] = self.loss_function(y_val_orig, y_val_pred)
                 test_losses[interval_idx] = self.loss_function(y_test_orig, y_test_pred)
 
+            # Update previous best lambda models for the next submodel
             prev_best_lambda_models = lambda_models_per_interval[end_interval - 1]
 
             # Update residuals for the next submodel using the last equation from the current one
             last_eq_lambda = sub_best_eqs[-1].lambda_format
 
+            # Get the subset of features used in the last equation
             X_train_sub = X_train_orig[sub_features]
             X_val_sub = X_val_orig[sub_features]
             X_test_sub = X_test_orig[sub_features]
 
+            # Update residuals for the next submodel
             y_train_residual -= last_eq_lambda(X_train_sub)
             y_val_residual -= last_eq_lambda(X_val_sub)
             y_test_residual -= last_eq_lambda(X_test_sub)
             
+            # Move to the next interval start
             current_interval_start = end_interval
 
         return (training_losses, validation_losses, test_losses), all_best_eqs, all_selected_features
