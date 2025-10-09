@@ -393,42 +393,6 @@ def train_val_test_split(
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
-def cumulative_lambda(
-    X: pd.DataFrame,
-    lambda_models: list[tuple[Callable, list[str]]]
-) -> np.ndarray:
-    """
-    Compute the cumulative prediction of an ensemble of symbolic regression models.
-
-    This function takes a list of lambda models (each consisting of a callable function and
-    the list of feature names it uses) and applies each model to the corresponding columns
-    of X. The predictions from all models are summed to produce the cumulative prediction
-    for each sample in X.
-
-    Parameters
-    ----------
-    X : pandas.DataFrame
-        Input feature matrix for which to compute the cumulative prediction.
-    lambda_models : list of (Callable, list of str)
-        List of tuples, where each tuple contains:
-            - A callable (e.g., a sympy lambda function) that takes as input the selected features.
-            - A list of feature names (columns of X) that the callable expects as input.
-
-    Returns
-    -------
-    y_pred : np.ndarray
-        Array of shape (n_samples,) containing the sum of predictions from all lambda models
-        for each sample in X.
-    """
-
-    y_pred = np.zeros(X.shape[0])  # Initialize predictions to zero
-
-    for func, features in lambda_models:
-        # Add the predictions of each lambda model for its selected features
-        y_pred += func(X[features])
-
-    return y_pred
-
 def fit_and_evaluate_best_equation(
     train_val_test_set: Tuple[
         pd.DataFrame, # X_train
