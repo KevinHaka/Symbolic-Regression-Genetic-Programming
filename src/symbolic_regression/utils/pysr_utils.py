@@ -532,6 +532,7 @@ def process_task(
     method: BaseMethod, 
     output_dir: str,
     return_results: bool = False,
+    random_state: Optional[int] = None,
     _: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """
@@ -559,6 +560,8 @@ def process_task(
         The directory where the output files will be saved.
     return_results : bool
         Flag that determines whether to return the results dictionary.
+    random_state : int or None
+        Random state for reproducibility.
     _ : Any
         Placeholder parameter for creating proper Dask task dependencies.
 
@@ -569,33 +572,14 @@ def process_task(
         Otherwise, results are only saved to disk as pickle files and None is returned.
     """
 
-    # pickle the current parameters to be able to recover them later if needed
-    # method.pysr_params['random_state'] = run
+    # Set random state for reproducibility
+    rng = np.random.default_rng(random_state)
 
-    # if method_name == "RFGPCMI":
-    #     method.method_params['random_state'] = run  # type: ignore
+    # Set the random state in the method's PySR parameters
+    method.pysr_params["random_state"] = rng.integers(0, 2**32)
 
-    # parameters = {
-    #     'dataset_name': dataset_name,
-    #     'method_name': method_name,
-    #     'run': run,
-    #     'train_val_test_set': train_val_test_set,
-    #     'method': method,
-    #     'output_dir': output_dir,
-    #     'return_results': return_results
-    # }
-    # with open("parameters.pkl", "wb") as f:
-    #     pickle.dump(parameters, f)
-
-    # Run the symbolic regression method and get the results
-    start = time.time()
-    with open("logfile.log", "a", encoding="utf-8") as lf:
-        lf.write(f"Starting: {dataset_name} - {method_name} - Run {run}\n")
-
-    temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set)
-    
-    with open("logfile.log", "a", encoding="utf-8") as lf:
-        lf.write(f"Completed: {dataset_name} - {method_name} - Run {run} in {time.time() - start:.2f} seconds\n")
+    # Run the method on the provided dataset splits
+    temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set, rng.integers(0, 2**32))
 
     # Organize the results into a dictionary
     results = {
@@ -612,6 +596,7 @@ def process_task(
     with open(os.path.join(output_dir, filename), "wb") as f:
         pickle.dump(results, f)
 
+    # Return results if specified
     if return_results:
         return results
     else:
