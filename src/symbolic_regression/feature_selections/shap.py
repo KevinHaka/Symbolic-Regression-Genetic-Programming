@@ -64,7 +64,7 @@ def get_shap_values(
 
         # Compute SHAP values for each feature in the equation
         shap_values = explainer.shap_values(X_foreground, silent=True)
-        feature_shap_values = np.mean(shap_values, axis=0)
+        feature_shap_values = np.mean(np.abs(shap_values), axis=0)
 
     else:
         str_variables = []
