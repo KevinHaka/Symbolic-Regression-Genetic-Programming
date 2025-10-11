@@ -86,12 +86,17 @@ def main() -> None:
 
     # Choose datasets to run
     dataset_names = [
-        "F1",
+        # "F1",
         # "F2",
+        # "Friedman1",
+        # "Friedman2",
+        # "Friedman3",
+        # "542_Pollution",
         # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         # "505_tecator",
     	# ("Communities and Crime", "CCN"),
-        ("Communities and Crime Unnormalized", "CCUN"),   
+        # ("Communities and Crime Unnormalized", "CCUN"),
+        ("Superconductivty Data", "Superconductivity"), 
     ]
     datasets = load_datasets(dataset_names) # Load datasets
 
@@ -148,9 +153,9 @@ def main() -> None:
 
     methods = {
         "GP": GP(**gp_params),
-        "GPSHAP": GPSHAP(**gpshap_params),
-        "GPCMI": GPCMI(**gpcmi_params),
-    	"RFGPCMI": RFGP(**rfgpcmi_params),
+        # "GPSHAP": GPSHAP(**gpshap_params),
+        # "GPCMI": GPCMI(**gpcmi_params),
+    	# "RFGPCMI": RFGP(**rfgpcmi_params),
     }
 
     # Get number of iterations from one of the methods
