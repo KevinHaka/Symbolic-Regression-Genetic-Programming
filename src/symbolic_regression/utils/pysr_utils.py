@@ -576,7 +576,8 @@ def process_task(
     rng = np.random.default_rng(random_state)
 
     # Set the random state in the method's PySR parameters
-    method.pysr_params["random_state"] = rng.integers(0, 2**32)
+    pysr_rs = rng.integers(0, 2**32) if method.pysr_params["deterministic"] else None
+    method.pysr_params["random_state"] = pysr_rs
 
     # Run the method on the provided dataset splits
     temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set, rng.integers(0, 2**32))
