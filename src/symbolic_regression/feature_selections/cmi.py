@@ -76,7 +76,6 @@ def select_features(
 
             # Compute CMI for each remaining feature
             for feature in remaining_features:
-                
                 # Compute I(feature; target | selected_features)
                 # If no features selected yet, this is just I(feature; target)
                 current_cmi = ee.mi(
@@ -96,7 +95,7 @@ def select_features(
 
             # Perform a permutation test to see if max CMI is significant
             # This tests the null hypothesis that I(feature; target | selected_features) = 0
-            res = permutation_test(
+            reject_null = permutation_test(
                 test_statistic = lambda data: ee.mi(x=data, **cmi_kwargs),
                 data = X_scaled[best_feature],
                 observed_statistic = best_value,
@@ -105,11 +104,10 @@ def select_features(
                 alternative = 'greater',
                 decision_by = 'p_value',
                 random_state = rng.integers(0, 2**32)
-            )
+            )['reject_null']
 
             # Check if cmi is significant; if not, stop selection
-            if res['reject_null']:
-
+            if reject_null:
                 # Add selected feature to results and remove from candidates
                 selected_features.append(best_feature)
                 cmi_values_selected_features.append(best_value)
