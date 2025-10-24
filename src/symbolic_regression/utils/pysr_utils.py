@@ -3,6 +3,7 @@ import os
 import pickle
 import random
 import time
+import warnings
 
 from typing import Iterable
 from contextlib  import contextmanager
@@ -122,7 +123,9 @@ def nrmse_loss(
 
     return rmse / denominator
 
-def all_values_real(a: Iterable) -> np.bool_:
+def all_values_real(
+    a: Iterable
+) -> np.bool_:
     """
     Return True if every element of array-like `a` is a real, finite number.
     Real means imag == 0 (for complex types). Finite means not NaN or ±Inf.
@@ -575,12 +578,22 @@ def process_task(
     # Set random state for reproducibility
     rng = np.random.default_rng(random_state)
 
+    # logging the start time
+    time_start = time.perf_counter()
+    with open('logfile.log', "a") as f:
+        f.write(f"Process started at {datetime.datetime.now().strftime(r'%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Starting process for {dataset_name} with method {method_name} (run {run})\n")
+
     # Set the random state in the method's PySR parameters
     pysr_rs = rng.integers(0, 2**32) if method.pysr_params["deterministic"] else None
     method.pysr_params["random_state"] = pysr_rs
 
     # Run the method on the provided dataset splits
-    temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set, rng.integers(0, 2**32))
+    temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set, int(rng.integers(0, 2**32)))
+
+    with open('logfile.log', "a") as f:
+        f.write(f"Ending process for {dataset_name} with method {method_name} (run {run})\n")
+        f.write(f"Total time taken: {time.perf_counter() - time_start:.2f} seconds\n")
 
     # Organize the results into a dictionary
     results = {
@@ -593,6 +606,7 @@ def process_task(
     }
 
     # Save the results to a file
+    # TODO: In specific file structure, e.g., output_dir/dataset_name/method_name/
     filename = f"results_{dataset_name}_{method_name}_{run}.pkl"
     with open(os.path.join(output_dir, filename), "wb") as f:
         pickle.dump(results, f)
@@ -919,3 +933,49 @@ def temporary_seed(seed: Optional[int] = None):
     
     # If seed is None, do nothing
     else: yield
+
+def warnings_manager(
+    func: Callable,
+    filters: Optional[List[dict]] = None,
+    *args,
+    **kwargs
+) -> Any:
+    """
+    Execute a function with flexible warning filters.
+    
+    Parameters
+    ----------
+    func : Callable
+        The function to execute
+    filters : list of dict, optional
+        List of filter dictionaries with keys:
+        - 'action': str (required) - 'ignore', 'error', 'always', etc.
+        - 'message': str (optional) - regex pattern for message
+        - 'category': Warning class (optional) - warning category
+        - 'module': str (optional) - regex pattern for module
+    *args, **kwargs
+        Arguments to pass to func
+    
+    Returns
+    -------
+    Any
+        The return value of the executed function
+    """
+
+    # Set up warning filters
+    with warnings.catch_warnings():
+        if filters: # If filters are provided
+            for filter_spec in filters: # Apply each filter
+                action = filter_spec.get('action', 'ignore')
+                message = filter_spec.get('message', '')
+                category = filter_spec.get('category', Warning)
+                module = filter_spec.get('module', '')
+                
+                warnings.filterwarnings(
+                    action=action,
+                    message=message,
+                    category=category,
+                    module=module,
+                )
+        
+        return func(*args, **kwargs)
