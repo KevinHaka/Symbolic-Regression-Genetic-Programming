@@ -58,6 +58,10 @@ def main() -> None:
     run_output_dir = os.path.join(data_dir, timestamp)
     os.makedirs(run_output_dir)
 
+    # create a log file
+    log_file = os.path.join(script_dir, "logfile.log")
+    if os.path.exists(log_file): os.remove(log_file)
+
     # ---------------- Parameters ----------------
 
     # For GPSHAP
@@ -72,14 +76,14 @@ def main() -> None:
     n_submodels = 2
 
     # General
-    n_runs = 30
+    n_runs = 10
     test_size = 0.2
     val_size = 0.2
     record_interval = 10
     resplit_interval = 10
     num_workers = os.cpu_count()
-    threads_per_worker = 2
-    random_state = None
+    threads_per_worker = 1
+    random_state = 27
 
     # Set random seed for reproducibility
     rng = default_rng(random_state)
@@ -88,15 +92,15 @@ def main() -> None:
     dataset_names = [
         # "F1",
         # "F2",
-        # "Friedman1",
-        # "Friedman2",
-        # "Friedman3",
-        # "542_Pollution",
+        #"Friedman1",
+        #"Friedman2",
+        "Friedman3",
+        "542_pollution",
         # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         # "505_tecator",
     	# ("Communities and Crime", "CCN"),
         # ("Communities and Crime Unnormalized", "CCUN"),
-        ("Superconductivty Data", "Superconductivity"), 
+        # ("Superconductivty Data", "Superconductivity"), 
     ]
     datasets = load_datasets(dataset_names) # Load datasets
 
@@ -104,7 +108,7 @@ def main() -> None:
     pysr_params = {
         "populations": 2,
         "population_size": 20,
-        "niterations": 50,
+        "niterations": 30,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv(x) = 1/x"],
         "extra_sympy_mappings": {
@@ -116,7 +120,8 @@ def main() -> None:
         "input_stream": 'devnull',
         "parallelism": "serial",
         "deterministic": False if random_state is None else True,
-        # "random_state": None
+        "batching": True,
+        "batch_size": 1000,
     }
 
     # GP method parameters
@@ -153,7 +158,7 @@ def main() -> None:
 
     methods = {
         "GP": GP(**gp_params),
-        # "GPSHAP": GPSHAP(**gpshap_params),
+        "GPSHAP": GPSHAP(**gpshap_params),
         # "GPCMI": GPCMI(**gpcmi_params),
     	# "RFGPCMI": RFGP(**rfgpcmi_params),
     }
