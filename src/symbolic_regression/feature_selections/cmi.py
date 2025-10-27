@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
 
-from ..utils.pysr_utils import permutation_test, temporary_seed
+from typing import Any, Dict, List, Optional, Tuple
 
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 from npeet import entropy_estimators as ee
-from typing import List, Optional, Tuple
+
+from ..utils.pysr_utils import permutation_test, temporary_seed
 
 def select_features(
     X: pd.DataFrame,
@@ -52,11 +54,11 @@ def select_features(
 
     # Set random seed for reproducibility
     with temporary_seed(int(rng.integers(0, 2**32))):
-
         # Initialize variables
         remaining_features = list(X.columns)
         cmi_values_selected_features = []
         selected_features = []
+        cmi_kwargs: Dict[str, Any] = {'k': k_nearest_neighbors}
 
         # Standardize data for stable MI estimation
         # MI estimation via k-NN requires normalized features
@@ -64,25 +66,38 @@ def select_features(
         y_scaled = StandardScaler().fit_transform(y.reshape(-1, 1))
         X_scaled = pd.DataFrame(X_scaled, columns=remaining_features)
 
-        # Initial CMI calculation parameters
-        cmi_kwargs = {'y': y_scaled, 'k': k_nearest_neighbors}
+        # Check if dataset exceeds threshold for sampling
+        should_sample = X_scaled.shape[0] > 1000
 
         # Greedy feature selection loop
         while remaining_features:
-
             # Track the feature with the highest CMI
             best_feature = ""
             best_value = -np.inf
+
+            # Sample data if necessary for efficiency
+            if should_sample:
+                X_sample, _, y_sample, _ = train_test_split(
+                    X_scaled, y_scaled, test_size=1000, random_state=rng.integers(0, 2**32)
+                )
+
+            else:
+                X_sample = X_scaled
+                y_sample = y_scaled
+
+            # Update CMI calculation parameters
+            cmi_kwargs.update({
+                'y': y_sample,
+                'z': X_sample[selected_features] if selected_features else None
+            })
 
             # Compute CMI for each remaining feature
             for feature in remaining_features:
                 # Compute I(feature; target | selected_features)
                 # If no features selected yet, this is just I(feature; target)
                 current_cmi = ee.mi(
-                    x=X_scaled[feature], 
-                    y=y_scaled, 
-                    z=X_scaled[selected_features] if selected_features else None,
-                    k=k_nearest_neighbors
+                    x=X_sample[feature], 
+                    **cmi_kwargs
                 )
 
                 # Update max CMI if current is greater
@@ -90,14 +105,11 @@ def select_features(
                     best_value = current_cmi
                     best_feature = feature
 
-            # Update CMI calculation parameters
-            cmi_kwargs['z'] = X_scaled[selected_features] if selected_features else None
-
             # Perform a permutation test to see if max CMI is significant
             # This tests the null hypothesis that I(feature; target | selected_features) = 0
             reject_null = permutation_test(
                 test_statistic = lambda data: ee.mi(x=data, **cmi_kwargs),
-                data = X_scaled[best_feature],
+                data = X_sample[best_feature],
                 observed_statistic = best_value,
                 n_permutations = n_permutations,
                 alpha = alpha,
