@@ -90,10 +90,6 @@ class GPSHAP(BaseMethod):
 
         # If features not cached, compute and store them
         if dataset_key not in self._feature_cache:
-
-            # Create a random number generator
-            rng = np.random.default_rng(random_state)
-
             gp_params = {
                 "loss_function": self.loss_function,
                 "record_interval": self.record_interval,
@@ -108,7 +104,7 @@ class GPSHAP(BaseMethod):
                 val_size=self.val_size,
                 n_runs=self.n_runs,
                 n_top_features=self.n_top_features,
-                random_state=rng.integers(0, 2**32),
+                random_state=random_state,
                 gp_params=gp_params
             )
 
@@ -145,16 +141,12 @@ class GPSHAP(BaseMethod):
 
         # If features not cached, compute and store them
         if dataset_key not in self._feature_cache:
-
-            # Create a random number generator
-            rng = np.random.default_rng(random_state)
-
             # Compute selected features using SHAP from pretrained models
             selected_features, _ = shap_pretrained_sf(
                 X_trains,
                 gp_equations,
                 n_top_features=n_top_features,
-                random_state=rng.integers(0, 2**32)
+                random_state=random_state
             )
 
             # Cache the selected features
@@ -196,16 +188,12 @@ class GPSHAP(BaseMethod):
 
         # If features not cached, compute and store them
         if dataset_key not in self._feature_cache.keys():
-
-            # Create a random number generator
-            rng = np.random.default_rng(random_state)
-
             # Combine all data for feature selection
             X = pd.concat([X_train, X_val, X_test], ignore_index=True)
             y = np.concatenate([y_train, y_val, y_test])
 
             # Precompute and cache selected features
-            selected_features = self.precompute_features(X, y, rng.integers(0, 2**32))
+            selected_features = self.precompute_features(X, y, random_state)
 
         else:
             selected_features = self._feature_cache[dataset_key]
