@@ -98,7 +98,7 @@ class GPSHAP(BaseMethod):
             }
 
             # Compute selected features using SHAP
-            selected_features, _ = shap_sf(
+            selected_features = shap_sf(
                 X, y,
                 test_size=self.test_size,
                 val_size=self.val_size,
@@ -106,7 +106,7 @@ class GPSHAP(BaseMethod):
                 n_top_features=self.n_top_features,
                 random_state=random_state,
                 gp_params=gp_params
-            )
+            )[0]
 
             # Cache the selected features
             self._feature_cache[dataset_key] = selected_features

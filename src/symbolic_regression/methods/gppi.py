@@ -136,12 +136,12 @@ class GPPI(BaseMethod):
         # If features not cached, compute and store them
         if dataset_key not in self._feature_cache:
             # Compute selected features using SHAP from pretrained models
-            selected_features, _ = pi_pretrained_sf(
+            selected_features = pi_pretrained_sf(
                 test_sets=test_sets,
                 err_org=err_org,
                 gp_equations=gp_equations,
                 random_state=random_state
-            )
+            )[0]
 
             # Cache the selected features
             self._feature_cache[dataset_key] = selected_features
