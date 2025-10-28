@@ -106,10 +106,11 @@ def select_features_from_pretrained_models(
             err_pmt = nrmse_loss(y_test, y_pred) # Compute error with permuted feature
             raw_FI[var][n_run] = err_pmt - err_org[n_run] # Store the raw feature importance
 
-    mean_raw_FI = {var: arr.mean() for var, arr in raw_FI.items()} # Compute mean raw feature importances
+    scaled_FI = {var: np.sqrt(length)*arr.mean() / arr.std() if (arr.std() > 0) else 0.0 
+                 for var, arr in raw_FI.items()} # Scale feature importances
     
-    selected_features = sorted(list(mean_raw_FI.keys()), key=lambda k: mean_raw_FI[k], reverse=True) # Sort features by importance
-    selected_features = [var for var in selected_features if mean_raw_FI[var] > 0] # Keep only features with positive importance
-    scaled_importances = [mean_raw_FI[var] for var in selected_features] # Get corresponding importances
+    selected_features = sorted(list(scaled_FI.keys()), key=lambda k: scaled_FI[k], reverse=True) # Sort features by importance
+    selected_features = [var for var in selected_features if scaled_FI[var] > 0] # Keep only features with positive importance
+    scaled_importances = [scaled_FI[var] for var in selected_features] # Get corresponding importances
 
     return selected_features, scaled_importances
