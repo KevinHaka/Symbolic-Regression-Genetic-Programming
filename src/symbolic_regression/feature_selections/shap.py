@@ -4,24 +4,10 @@ import pandas as pd
 from sympy import lambdify
 from shap import SamplingExplainer, utils
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from symbolic_regression.methods.gp import GP
 from symbolic_regression.utils.pysr_utils import train_val_test_split
-
-def lambda_func_shap(
-    X: np.ndarray, 
-    lambda_func: Callable
-) -> np.ndarray:
-    """
-    Wrapper to adapt a lambda function to SHAP's expected input format.
-
-    Args:
-        X: Input data array of shape (n_samples, n_features).
-        lambda_func: A lambda function that takes all columns of X as arguments.
-    """
-
-    return lambda_func(*[X[:, i] for i in range(X.shape[1])])
 
 def get_shap_values(
     X_train: pd.DataFrame,
@@ -58,8 +44,9 @@ def get_shap_values(
 
         # Create SHAP explainer for the equation function
         explainer = SamplingExplainer(
-            lambda X: lambda_func_shap(X, lambda_func),
-            X_background
+            lambda X: lambda_func(*X.T),
+            X_background,
+            seed=int(rng.integers(0, 2**32))
         )
 
         # Compute SHAP values for each feature in the equation
