@@ -38,19 +38,15 @@ def get_shap_values(
         lambda_func = lambdify(expr_variables, sympy_expr, modules="numpy")
         str_variables = [str(var) for var in expr_variables]
         
-        # Sample data for SHAP analysis
-        X_background = utils.sample(X_train[str_variables], 100, random_state=int(rng.integers(0, 2**32)))
-        X_foreground = utils.sample(X_train[str_variables], 1000, random_state=int(rng.integers(0, 2**32)))
-
         # Create SHAP explainer for the equation function
         explainer = SamplingExplainer(
             lambda X: lambda_func(*X.T),
-            X_background,
+            X_train[str_variables],
             seed=int(rng.integers(0, 2**32))
         )
 
         # Compute SHAP values for each feature in the equation
-        shap_values = explainer.shap_values(X_foreground, silent=True)
+        shap_values = explainer.shap_values(X_train[str_variables], silent=True)
         feature_shap_values = np.mean(np.abs(shap_values), axis=0)
 
     else:
