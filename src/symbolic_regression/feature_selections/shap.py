@@ -53,8 +53,8 @@ def get_shap_values(
         str_variables = [str(var) for var in expr_variables]
         
         # Sample data for SHAP analysis
-        X_background = utils.sample(X_train[str_variables], 100, random_state=rng.integers(0, 2**32))
-        X_foreground = utils.sample(X_train[str_variables], 1000, random_state=rng.integers(0, 2**32))
+        X_background = utils.sample(X_train[str_variables], 100, random_state=int(rng.integers(0, 2**32)))
+        X_foreground = utils.sample(X_train[str_variables], 1000, random_state=int(rng.integers(0, 2**32)))
 
         # Create SHAP explainer for the equation function
         explainer = SamplingExplainer(
@@ -135,7 +135,7 @@ def select_features(
         X_trains=tuple(X_trains),
         gp_equations=gp_equations,
         n_top_features=n_top_features,
-        random_state=rng.integers(0, 2**32)
+        random_state=int(rng.integers(0, 2**32))
     )
     return selected_features, mean_shap_values_selected_features
 
