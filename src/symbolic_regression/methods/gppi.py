@@ -193,6 +193,10 @@ class GPPI(BaseMethod):
         else:
             selected_features = self._feature_cache[dataset_key]
 
+        # If no features were selected, choose one feature at random
+        if not selected_features:
+            selected_features = np.random.choice(X_train.columns, 1).tolist()
+
         # Create a new data split with only the selected features
         train_val_test_set_filtered = (
             X_train[selected_features],
