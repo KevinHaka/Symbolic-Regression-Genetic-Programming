@@ -67,7 +67,8 @@ def select_features(
         X_scaled = pd.DataFrame(X_scaled, columns=remaining_features)
 
         # Check if dataset exceeds threshold for sampling
-        should_sample = X_scaled.shape[0] > 1000
+        sample_threshold = 200
+        should_sample = X_scaled.shape[0] > sample_threshold
 
         # Greedy feature selection loop
         while remaining_features:
@@ -78,7 +79,7 @@ def select_features(
             # Sample data if necessary for efficiency
             if should_sample:
                 X_sample, _, y_sample, _ = train_test_split(
-                    X_scaled, y_scaled, test_size=1000, random_state=rng.integers(0, 2**32)
+                    X_scaled, y_scaled, test_size=sample_threshold, random_state=rng.integers(0, 2**32)
                 )
 
             else:
