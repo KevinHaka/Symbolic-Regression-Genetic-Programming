@@ -3,8 +3,9 @@ import pandas as pd
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from symbolic_regression.methods.gp import GP
-from symbolic_regression.utils.pysr_utils import train_val_test_split, nrmse_loss
+from ..methods.gp import GP
+from ..utils.pysr_utils import train_val_test_split
+from ..utils.losses import rmse_loss
 
 def select_features(
     X: pd.DataFrame,
@@ -103,7 +104,7 @@ def select_features_from_pretrained_models(
             X_test_pmt = X_test.copy() # Create a copy of the test set
             X_test_pmt[var] = rng.permutation(X_test_pmt[var]) # Permute the selected feature
             y_pred = equation.lambda_format(X_test_pmt) # Predict using the permuted test set
-            err_pmt = nrmse_loss(y_test, y_pred) # Compute error with permuted feature
+            err_pmt = rmse_loss(y_test, y_pred) # Compute error with permuted feature
             raw_FI[var][n_run] = err_pmt - err_org[n_run] # Store the raw feature importance
 
     scaled_FI = {var: np.sqrt(length)*arr.mean() / arr.std() if (arr.std() > 0) else 0.0 
