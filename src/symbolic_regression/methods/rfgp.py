@@ -58,7 +58,8 @@ class RFGP(BaseMethod):
 
         Args:
             n_submodels (int): Number of submodels to fit sequentially.
-            method_class (Type[BaseMethod]): The class of the method to be used for each submodel (e.g., GP, GPCMI).
+            method_class (Type[BaseMethod]): The method class to use for each submodel (e.g., GPCMI) 
+            must be a filter method.
             method_params (Optional[Dict[str, Any]]): Parameters for the sub-method.
         """
 
