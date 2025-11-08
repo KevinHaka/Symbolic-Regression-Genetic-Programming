@@ -6,7 +6,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from inspect import signature
 
 from .base import BaseMethod
-from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
+from ..utils.pysr_utils import fit_and_evaluate_best_equation
+from ..methods.gp import GP
 from ..feature_selections.pi import select_features as pi_sf
 from ..feature_selections.pi import select_features_from_pretrained_models as pi_pretrained_sf
 
@@ -16,7 +17,7 @@ class GPPI(BaseMethod):
         test_size: float = signature(pi_sf).parameters['test_size'].default,
         val_size: float = signature(pi_sf).parameters['val_size'].default,
         n_runs: int = signature(pi_sf).parameters['n_runs'].default,
-        loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = nrmse_loss,
+        loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = signature(GP).parameters['loss_function'].default,
         record_interval: Optional[int] = 1,
         resplit_interval: Optional[int] = None,
         pysr_params: Optional[Dict[str, Any]] = None

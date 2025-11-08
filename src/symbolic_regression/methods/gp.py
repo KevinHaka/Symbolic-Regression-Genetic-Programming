@@ -4,7 +4,9 @@ import numpy as np
 from typing import Callable, List, Optional, Tuple, Dict, Any
 
 from .base import BaseMethod
-from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
+from ..utils.pysr_utils import fit_and_evaluate_best_equation
+from ..utils.losses import nrmse_loss
+
 
 class GP(BaseMethod):
     def __init__(

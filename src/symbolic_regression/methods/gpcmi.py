@@ -5,7 +5,8 @@ from typing import Any, Callable, Dict, Optional, Tuple, List
 from inspect import signature
 
 from .base import BaseMethod
-from ..utils.pysr_utils import fit_and_evaluate_best_equation, nrmse_loss
+from ..utils.pysr_utils import fit_and_evaluate_best_equation
+from ..methods.gp import GP
 from ..feature_selections.cmi import select_features as cmi_sf
 
 class GPCMI(BaseMethod):
@@ -14,7 +15,7 @@ class GPCMI(BaseMethod):
         n_permutations: int = signature(cmi_sf).parameters['n_permutations'].default,
         alpha: float = signature(cmi_sf).parameters['alpha'].default,
         k_nearest_neighbors: int = signature(cmi_sf).parameters['k_nearest_neighbors'].default,
-        loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = nrmse_loss,
+        loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = signature(GP).parameters['loss_function'].default,
         record_interval: Optional[int] = 1,
         resplit_interval: Optional[int] = None,
         pysr_params: Optional[Dict[str, Any]] = None
