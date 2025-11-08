@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from sympy import lambdify
-from shap import SamplingExplainer, utils
+from shap import SamplingExplainer
 
 from typing import Any, Dict, List, Optional, Tuple
 
