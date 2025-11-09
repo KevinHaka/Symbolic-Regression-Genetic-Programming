@@ -66,6 +66,7 @@ def select_features(
         y_scaled = StandardScaler().fit_transform(y.reshape(-1, 1))
         X_scaled = pd.DataFrame(X_scaled, columns=remaining_features)
 
+        # HACK: Sampling for large datasets to speed up CMI estimation
         # Check if dataset exceeds threshold for sampling
         sample_threshold = 200
         should_sample = X_scaled.shape[0] > sample_threshold
