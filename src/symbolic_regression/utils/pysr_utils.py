@@ -1,13 +1,10 @@
 import datetime
 import os
-import pickle
 import random
 import time
 import warnings
 
-from typing import Iterable
-from contextlib  import contextmanager
-
+import dill
 import pandas as pd
 import numpy as np
 
@@ -20,7 +17,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
-from typing import Optional, Callable, Dict, List, Tuple, Any
+from contextlib  import contextmanager
+from typing import Iterable, Optional, Callable, Dict, List, Sequence, Tuple, Any
 from inspect import signature
 import smtplib
 from email.message import EmailMessage
@@ -97,7 +95,6 @@ def best_equation(
 
         # Check if all predicted values are real
         if all_values_real(y_pred):
-
             # If X_check is provided, ensure predictions are real on that set too
             if X_check is not None:
                 y_check_pred = eq.lambda_format(X_check)
@@ -110,7 +107,7 @@ def best_equation(
 
     # Filter out equations that did not produce real values
     df_filtered = df_copy.loc[mask].copy().reset_index(drop=True)
-    mask2 = [True]+[False]*(len(df_filtered)-1) # Mask to track equations with decreasing loss
+    mask = [True]+[False]*(len(df_filtered)-1) # Mask to track equations with decreasing loss
     losses = df_filtered['loss'] # Extract losses
     min_loss = losses.iloc[0] # Initialize minimum loss
 
@@ -120,11 +117,11 @@ def best_equation(
 
         # If current loss is less than the minimum loss, keep it
         if current_loss < min_loss:
-            mask2[idx] = True
+            mask[idx] = True
             min_loss = current_loss
 
     # Final filtering
-    df_final = df_filtered.loc[mask2].copy().reset_index(drop=True)
+    df_final = df_filtered.loc[mask].copy().reset_index(drop=True)
 
     # Compute score based on loss improvement and complexity increase
     for idx in range(1, len(df_final)):
@@ -216,12 +213,12 @@ def plot_results(
     plotting_function: Callable = sns.boxenplot
 ) -> tuple[Figure, np.ndarray]:
     """
-    Plots boxenplots for a given pandas DataFrame with MultiIndex columns.
+    Create subplots for each group in a MultiIndex DataFrame.
 
     Parameters
     ----------
     dataframe : pd.DataFrame
-        DataFrame with MultiIndex columns. Each level corresponds to a grouping (e.g., dataset, method, metric).
+        DataFrame with MultiIndex columns. Each level corresponds to a grouping.
     nrows : int, optional
         Number of rows of subplots (default is 1).
     ncols : int or None, optional
@@ -498,6 +495,27 @@ def process_task(
         Otherwise, results are only saved to disk as pickle files and None is returned.
     """
 
+       
+    # create a data directory if it doesn't exist
+    final_dir = os.path.join(output_dir+"_params", dataset_name, method_name)
+    os.makedirs(final_dir, exist_ok=True)
+
+    if method_name in ["GPSHAP", "GPPI"]:
+        method._feature_cache = dict(method._feature_cache)
+    
+    # Pickle function parameters
+    with open(os.path.join(output_dir+"_params", dataset_name, method_name, f"{run}.pkl"), "wb") as f:
+        dill.dump({
+            'dataset_name': dataset_name,
+            'method_name': method_name,
+            'run': run,
+            'train_val_test_set': train_val_test_set,
+            'method': method,
+            "output_dir": output_dir,
+            "return_results": return_results,
+            "random_state": random_state,
+        }, f)
+
     # Set random state for reproducibility
     rng = np.random.default_rng(random_state)
 
@@ -523,22 +541,26 @@ def process_task(
         'dataset_name': dataset_name,
         'method_name': method_name,
         'run': run,
-        'losses': temp_losses,
+        'losses': {
+            'training_losses': temp_losses[0],
+            'validation_losses': temp_losses[1],
+            'test_losses': temp_losses[2],
+        },
         'equations': temp_best_eqs,
         'features': temp_features
     }
 
     # Save the results to a file
-    # TODO: In specific file structure, e.g., output_dir/dataset_name/method_name/
-    filename = f"results_{dataset_name}_{method_name}_{run}.pkl"
-    with open(os.path.join(output_dir, filename), "wb") as f:
-        pickle.dump(results, f)
+    # create a data directory if it doesn't exist
+    final_dir = os.path.join(output_dir, dataset_name, method_name)
+    os.makedirs(final_dir, exist_ok=True)
+
+    filename = f"{run}.pkl"
+    with open(os.path.join(final_dir, filename), "wb") as f:
+        dill.dump(results, f)
 
     # Return results if specified
-    if return_results:
-        return results
-    else:
-        return None
+    if return_results: return results
 
 def send_email(
     subject: str, 
@@ -638,37 +660,81 @@ def timeit(
         'all_times': times
     }
 
-def load_task_results(
-    directory: str
-) -> list:
-    """Load all .pkl task result files from a directory."""
+def load_pickle_files(
+    directory: str,
+    suffix: str = '.pkl'
+) -> List[Dict]:
+    """
+    Recursively finds and loads data from pickle files in a directory.
 
-    results = []
-    for filename in os.listdir(directory):
-        if filename.endswith(".pkl"):
-            filepath = os.path.join(directory, filename)
+    This function walks through a directory and its subdirectories,
+    finds all files ending with the specified suffix, and loads
+    the data from them using pickle.
 
-            with open(filepath, "rb") as f:
-                results.append(pickle.load(f))
+    Args:
+        directory (str): The path to the root directory to search.
+        suffix (str, optional): The file extension to look for.
 
-    return results
+    Returns:
+        List[Dict]: A list containing the loaded data from each pickle file. 
+    """
 
-def collect_results(
-    task_results: list, 
-    datasets: Dict, 
-    methods: Dict
-) -> Tuple[Dict, Dict, Dict]:
-    results = {}
+    loaded_data = [] # List to store loaded data.
+    
+    # Walk through the directory and its subdirectories.
+    for root, _, files in os.walk(directory):
+        for filename in files:
+            # Check if the filename ends with the desired suffix.
+            if filename.endswith(suffix):
+                # Construct the full path to the file.
+                file_path = os.path.join(root, filename)
+
+                # Open the file and load its content using pickle.
+                with open(file_path, 'rb') as f:
+                    loaded_data.append(dill.load(f))
+    
+    return loaded_data
+
+def organize_results(
+    task_results: List[Dict[str, Any]]
+) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """
+    Organizes results from a list of task runs.
+
+    This function takes a list of result dictionaries (task_results)
+    and reorganizes them into three main dictionaries (for losses,
+    equations, and features), grouped by dataset name and method name.
+
+    Args:
+        task_results (List[Dict[str, Any]]): A list of dictionaries, where each
+            dictionary contains the results of a single run
+            (e.g., 'dataset_name', 'method_name', 'losses', etc.).
+
+    Returns:
+        Tuple[Dict, Dict, Dict]: A tuple containing three dictionaries:
+        1.  `losses`: A dictionary of losses, nested by dataset and method.
+        2.  `equations`: A dictionary of equations, nested by dataset and method.
+        3.  `features`: A dictionary of features, nested by dataset and method.
+    """
+
+    # Identify unique dataset and method names.
+    dataset_names = set(task_result['dataset_name'] for task_result in task_results)
+    method_names = set(task_result['method_name'] for task_result in task_results)
+
+    # Initialize the output structures.
+    losses = {}
     equations = {}
     features = {}
 
-    for dataset_name in datasets.keys():
-        results[dataset_name] = {}
+    # Initialize dataset-level dictionaries.
+    for dataset_name in dataset_names:
+        losses[dataset_name] = {}
         equations[dataset_name] = {}
         features[dataset_name] = {}
 
-        for method_name in methods.keys():
-            results[dataset_name][method_name] = {
+        # Initialize method-level dictionaries.
+        for method_name in method_names:
+            losses[dataset_name][method_name] = {
                 "training_losses": [],
                 "validation_losses": [],
                 "test_losses": [],
@@ -676,19 +742,21 @@ def collect_results(
             equations[dataset_name][method_name] = []
             features[dataset_name][method_name] = []
 
-    for result in task_results:
-        dataset_name = result['dataset_name']
-        method_name = result['method_name']
-        losses = result['losses']
+    # Iterate through the task results.
+    for task_result in task_results:
+        # Extract key information from the current result.
+        dataset = task_result['dataset_name']
+        method = task_result['method_name']
+        
+        # Assign the values to their respective structures.
+        losses_data = task_result['losses']
+        losses[dataset][method]['training_losses'].append(losses_data['training_losses'])
+        losses[dataset][method]['validation_losses'].append(losses_data['validation_losses'])
+        losses[dataset][method]['test_losses'].append(losses_data['test_losses'])
+        equations[dataset][method].append(task_result['equations'])
+        features[dataset][method].append(task_result['features'])
 
-        results[dataset_name][method_name]["training_losses"].append(losses[0])
-        results[dataset_name][method_name]["validation_losses"].append(losses[1])   
-        results[dataset_name][method_name]["test_losses"].append(losses[2])
-
-        equations[dataset_name][method_name].append(result['equations'])
-        features[dataset_name][method_name].append(result['features'])
-
-    return results, equations, features
+    return losses, equations, features
 
 def save_results(
     df: pd.DataFrame, 
@@ -704,11 +772,11 @@ def save_results(
         'features': features
     }
 
-    timestamp = datetime.datetime.now().strftime(r"%Y-%m-%d_%H-%M-%S")
-    filename = f"{prefix}_{timestamp}.pickle"
+    timestamp = datetime.datetime.now().strftime(r"%Y%m%d_%H%M%S")
+    filename = f"{prefix}{'_' if prefix else ''}{timestamp}.pkl"
 
     with open(filename, "wb") as f:
-        pickle.dump(data, f)
+        dill.dump(data, f)
 
     return filename
 
