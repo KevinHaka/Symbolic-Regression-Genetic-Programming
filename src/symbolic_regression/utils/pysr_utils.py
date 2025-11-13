@@ -143,46 +143,67 @@ def best_equation(
     assert isinstance(best_row, pd.Series), "Best row is not a Series."
     return best_row 
 
+def flatten_dict(
+    nested: Dict
+) -> Dict:
+    """
+    Flatten a nested dict into a single-level dict where keys are tuple paths.
+
+    Behavior:
+    - Each leaf value is stored under a tuple key representing its path from the root.
+    - Top-level leaves are stored with a 1-tuple key, e.g. ('x',).
+
+    Parameters:
+    - nested: A dict that may contain other dicts as values.
+
+    Returns:
+    - Dict with tuple keys (path from root) mapped to the corresponding leaf values.
+    """
+
+    flat = {}  # Accumulator for the flattened result
+
+    # Iterate through each key-value pair in the current dict
+    for key, value in nested.items():
+        if isinstance(value, dict): # If the value is a dict, recurse into it
+            sub_flat = flatten_dict(value)  # Recursively flatten the child dict
+
+            # Incorporate the flattened sub-dict into the main flat dict
+            for sub_key, sub_val in sub_flat.items():
+                path = (key, *sub_key) # Create the full path tuple
+                flat[path] = sub_val # Store the value under the full path key
+        
+        # If the value is not a dict, store it with a 1-tuple key
+        else: flat[(key,)] = value
+    return flat
+
 def results_to_dataframe(
-    results: Dict[str, Dict[str, Dict[str, np.ndarray]]],
-    epochs: np.ndarray
+    results: Dict,
+    epochs: Sequence
 ) -> pd.DataFrame:
     """
-    Converts a nested dictionary of results into a pandas DataFrame with a MultiIndex for columns.
+    Convert nested results dict into a pandas DataFrame with MultiIndex columns.
 
-    Parameters
-    ----------
-    results : dict
-        Dictionary with structure {dataset: {method: {metric: values}}}, where values are np.ndarray of measurements.
+    Parameters:
+    - results: Nested dict with structure results[dataset][method][metric] = list of arrays
+    - epochs: Sequence of epoch values corresponding to the data points
 
-    Returns
-    -------
-    df : pandas.DataFrame
-        DataFrame with MultiIndex columns (dataset, method, metric) and rows corresponding to runs.
+    Returns:
+    - pd.DataFrame with MultiIndex columns (dataset, method, metric) and MultiIndex rows (run, epoch)
     """
-    
-    data = {
-        (dataset_name, method, metric): [loss for losses in run_losses for loss in losses]
-        for dataset_name, models in results.items()
-        for method, metrics in models.items()
-        for metric, run_losses  in metrics.items()
-    }
 
-    temp_results = results.copy()
-    while isinstance(temp_results, dict):
-        key = next(iter(temp_results))
-        temp_results = temp_results[key]
-    n_runs = len(temp_results)
+    data = flatten_dict(results) # Flatten the nested dict
+    n_runs = len(next(iter(data.values()))) # Number of runs
+    data = {k: np.concatenate(v) for k, v in data.items()} # Concatenate arrays for each key
 
+    # Create MultiIndex for rows: (run, epoch)
     row_index = pd.MultiIndex.from_tuples([
         (run, epoch)
         for run in range(n_runs)
         for epoch in epochs
     ], names=['run', 'epoch'])
 
-    df = pd.DataFrame(data, index=row_index)
+    df = pd.DataFrame(data, index=row_index) # Create DataFrame with flattened data and row index
     df.columns.names = ['dataset', 'method', 'metric'] # Name the column levels
-
     return df
 
 def plot_results(
