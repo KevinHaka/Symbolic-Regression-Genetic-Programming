@@ -83,7 +83,7 @@ def _4544_geographical_original_of_music(
     Returns
     -------
     X : pandas.DataFrame
-        Feature matrix containing 117 audio/music features.
+        Feature matrix of shape (1059, 117) containing audio/music features.
     y : np.ndarray
         Target values representing the latitude of the geographical origin.
     """
@@ -280,7 +280,7 @@ def _superconductivity(
     X : pandas.DataFrame
         Feature matrix of shape (21263, 81).
     y : np.ndarray
-        Target values representing critical temperature (in Kelvin), shape (21263,).
+        Target values representing critical temperature (in Kelvin).
     """
 
     # Fetch dataset from UCI ML repository
