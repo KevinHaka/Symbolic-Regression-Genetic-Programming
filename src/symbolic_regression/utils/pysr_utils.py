@@ -578,9 +578,34 @@ def send_email(
     smtp_server: str, 
     smtp_port: int, 
 ):
-    if receiver_email is None:
-        receiver_email = sender_email
+    """
+    Send an email.
 
+    Parameters
+    ----------
+    subject : str
+        Subject of the email.
+    body_message : str
+        Body content of the email.
+    sender_email : str
+        Email address of the sender.
+    receiver_email : str
+        Email address of the receiver.
+    app_password : str
+        App-specific password for the sender's email account.
+    smtp_server : str
+        SMTP server address.
+    smtp_port : int
+        SMTP server port.
+
+    Returns
+    -------
+    (success, error)
+        success: True if sent, False otherwise.
+        error: error message if failed, else None.
+    """
+
+    # Compose the email message
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = sender_email
@@ -588,14 +613,15 @@ def send_email(
     msg.set_content(body_message)
 
     try:
+        # Establish a secure SSL connection to the SMTP server
         with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
             # Connect to the SMTP server and send the email
             server.login(sender_email, app_password)
             server.send_message(msg)
-            print("The notification email has been sent successfully!")
+            return True, None
             
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        return False, f"{type(e).__name__}: {e}"
 
 def gather_splits(split_results, index):
     """Gathers a specific part of the train-val-test split results (e.g., index 0 for X_train)."""
