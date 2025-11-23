@@ -460,7 +460,6 @@ def process_task(
     output_dir: str,
     return_results: bool = False,
     random_state: Optional[int] = None,
-    _: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Executes a single run of a symbolic regression method on a given dataset.
@@ -476,7 +475,7 @@ def process_task(
     method_name : str
         The name of the symbolic regression method being used.
     run : int
-        The current run number (e.g., for repeated experiments).
+        The current run number for identification.
     train_val_test_set : Tuple
         A tuple containing the training, validation, and test data splits.
         Expected format: (X_train, X_val, X_test, y_train, y_val, y_test).
@@ -489,17 +488,21 @@ def process_task(
         Flag that determines whether to return the results dictionary.
     random_state : int or None
         Random state for reproducibility.
-    _ : Any
-        Placeholder parameter for creating proper Dask task dependencies.
 
     Returns
     -------
     Dict[str, Any] or None
-        If dependency is not None, returns the results dictionary.
+        If `return_results` is True, returns a dictionary containing:
+        - 'dataset_name': str
+        - 'method_name': str
+        - 'run': int
+        - 'losses': Dict[str, np.ndarray]
+        - 'equations': List[pd.Series]
+        - 'features': List[Any]
         Otherwise, results are only saved to disk as pickle files and None is returned.
     """
-
-       
+    
+    # TODO: I have to implement it better for reproducibility
     # create a data directory if it doesn't exist
     final_dir = os.path.join(output_dir+"_params", dataset_name, method_name)
     os.makedirs(final_dir, exist_ok=True)
