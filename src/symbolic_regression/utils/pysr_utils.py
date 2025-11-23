@@ -304,7 +304,8 @@ def train_val_test_split(
     # Initialize random number generator
     rng = np.random.default_rng(random_state)
     
-    adjusted_val_size = val_size / (1 - test_size)  # Adjust validation size
+    # Adjust validation size
+    adjusted_val_size = val_size / (1 - test_size) 
 
     # Split the data into train/val/test sets
     X_train_val, X_test, y_train_val, y_test = train_test_split(
