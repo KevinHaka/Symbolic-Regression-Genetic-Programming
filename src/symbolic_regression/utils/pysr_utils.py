@@ -346,11 +346,11 @@ def fit_and_evaluate_best_equation(
     loss_function : Callable
         Function to compute the loss between true and predicted values.
     record_interval : int, optional
-        Number of generations (iterations) between each recording of training, validation, and test losses.
-        For example, if record_interval=2, losses are recorded every 2 generations. Default is 1.
+        Number of epochs (iterations) between each recording of training, validation, and test losses.
+        For example, if record_interval=2, losses are recorded every 2 epochs. Default is 1.
     resplit_interval : int, optional
-        Number of generations (iterations) between each resplitting of the training and validation sets.
-        For example, if resplit_interval=3, the training and validation sets are resplit every 3 generations.
+        Number of epochs (iterations) between each resplitting of the training and validation sets.
+        For example, if resplit_interval=3, the training and validation sets are resplit every 3 epochs.
     pysr_params : dict, optional
         Parameters to pass to PySRRegressor (default: None).
 
@@ -411,7 +411,6 @@ def fit_and_evaluate_best_equation(
     # Process events in chronological order
     for it in sorted(events.keys()):
         step = it - prev_iter # Number of iterations to run since last event
-        if step <= 0: print(f"Warning: Non-positive step size {step} at iteration {it}. Skipping.")
 
         model.set_params(niterations=step) # Update niterations for this step
         model.fit(X_train, y_train) # Fit the model for the current step
@@ -442,11 +441,11 @@ def fit_and_evaluate_best_equation(
             X_train_val = pd.concat([X_train, X_val], ignore_index=True)
             y_train_val = np.concatenate([y_train, y_val], axis=0)
 
-            # Compute adjusted validation size and split the data into new train/val sets
-            adjusted_val_size = len(y_val)/(len(y_train_val))
+            # Compute adjusted train size and split the data into new train/val sets
+            adjusted_train_size = len(y_train)/(len(y_train_val))
             X_train, X_val, y_train, y_val = train_test_split(
                 X_train_val, y_train_val, 
-                test_size=adjusted_val_size, 
+                train_size=adjusted_train_size, 
                 random_state=rng.integers(0, 2**32)
             )
 
