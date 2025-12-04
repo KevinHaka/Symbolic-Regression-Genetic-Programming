@@ -4,8 +4,8 @@ import pandas as pd
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..methods.gp import GP
-from ..utils.pysr_utils import train_val_test_split
 from ..utils.losses import rmse_loss
+from ..utils.data_utils import train_val_test_split
 
 def select_features(
     X: pd.DataFrame,

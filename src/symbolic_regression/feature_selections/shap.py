@@ -6,8 +6,8 @@ from shap import SamplingExplainer
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from symbolic_regression.methods.gp import GP
-from symbolic_regression.utils.pysr_utils import train_val_test_split
+from ..methods.gp import GP
+from ..utils.data_utils import train_val_test_split
 
 def get_shap_values(
     X_train: pd.DataFrame,

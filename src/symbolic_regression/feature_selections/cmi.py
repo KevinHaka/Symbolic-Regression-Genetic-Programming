@@ -7,7 +7,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from npeet import entropy_estimators as ee
 
-from ..utils.pysr_utils import permutation_test, temporary_seed
+from ..utils.stats import permutation_test
+from ..utils.system_utils import temporary_seed
+
 
 def select_features(
     X: pd.DataFrame,
