@@ -5,9 +5,9 @@ from multiprocessing import Manager
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from inspect import signature
 
+from .gp import GP
 from .base import BaseMethod
-from ..utils.pysr_utils import fit_and_evaluate_best_equation
-from ..methods.gp import GP
+from ..utils.model_utils import fit_and_evaluate_best_equation
 from ..feature_selections.shap import select_features as shap_sf
 from ..feature_selections.shap import select_features_from_pretrained_models as shap_pretrained_sf
 
