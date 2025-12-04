@@ -70,7 +70,7 @@ def select_features(
 
         # HACK: Sampling for large datasets to speed up CMI estimation
         # Check if dataset exceeds threshold for sampling
-        sample_threshold = 200
+        sample_threshold = 1000
         should_sample = X_scaled.shape[0] > sample_threshold
 
         # Greedy feature selection loop
