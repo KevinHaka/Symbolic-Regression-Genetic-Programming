@@ -623,14 +623,6 @@ def send_email(
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 
-def gather_splits(split_results, index):
-    """Gathers a specific part of the train-val-test split results (e.g., index 0 for X_train)."""
-    return tuple(split[index] for split in split_results)
-
-def extract_equations(results, index):
-    """Extracts the equations from the results."""
-    return [result['equations'][index] for result in results]
-
 def timeit(
     func: Callable, 
     *args: Any, 
