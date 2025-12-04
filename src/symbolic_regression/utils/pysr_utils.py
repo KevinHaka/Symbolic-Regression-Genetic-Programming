@@ -789,7 +789,7 @@ def save_results(
     features: Dict, 
     prefix: str = "data"
 ) -> str:
-    """Save results, equations, and features to a pickle file with a timestamped filename."""
+    """Save df, equations, and features to a pickle file with a timestamped filename."""
 
     data = {
         'df': df,
@@ -873,7 +873,7 @@ def permutation_test(
                 (count_greater + 1) / (n_permutations + 1),
                 (count_less + 1) / (n_permutations + 1)
             )
-            p_value = min(1.0, p_value)   # clip to 1
+            p_value = min(1.0, p_value) # clip to 1
             lower_bound = np.quantile(null_distribution, alpha / 2)
             upper_bound = np.quantile(null_distribution, 1 - alpha / 2)
 
@@ -889,8 +889,7 @@ def permutation_test(
             lower_bound = np.quantile(null_distribution, alpha)
             upper_bound = None
 
-        case _:
-            raise ValueError("Alternative must be 'two-sided', 'greater', or 'less'.")
+        case _: raise ValueError("Alternative must be 'two-sided', 'greater', or 'less'.")
         
     # Decide whether to reject the null hypothesis
     match decision_by:
