@@ -508,7 +508,7 @@ def process_task(
     os.makedirs(final_dir, exist_ok=True)
 
     if method_name in ["GPSHAP", "GPPI"]:
-        method._feature_cache = dict(method._feature_cache)
+        method._feature_cache = dict(method._feature_cache) # type: ignore
     
     # Pickle function parameters
     with open(os.path.join(output_dir+"_params", dataset_name, method_name, f"{run}.pkl"), "wb") as f:
