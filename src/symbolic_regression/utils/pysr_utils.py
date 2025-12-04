@@ -919,29 +919,32 @@ def permutation_test(
     }
 
 @contextmanager
-def temporary_seed(seed: Optional[int] = None):
+def temporary_seed(
+    seed: Optional[int] = None
+):
     """
     Context manager that temporarily sets the global random seed for
     both `numpy` (legacy RNG) and Python's `random` module,
     and restores the previous state upon exit.
     """
 
-    if seed is not None:
-        # Save current states
-        old_np_state = np.random.get_state()
-        old_random_state = random.getstate()
-        
-        # Set new seed
-        np.random.seed(seed)
-        random.seed(seed)
-        
-        try: yield
-        finally: # Restore previous states
-            np.random.set_state(old_np_state)
-            random.setstate(old_random_state)
-    
     # If seed is None, do nothing
-    else: yield
+    if seed is None:
+        yield
+        return
+
+    # Save current states
+    old_np_state = np.random.get_state()
+    old_random_state = random.getstate()
+    
+    # Set new seed
+    np.random.seed(seed)
+    random.seed(seed)
+    
+    try: yield
+    finally: # Restore previous states
+        np.random.set_state(old_np_state)
+        random.setstate(old_random_state)
 
 def warnings_manager(
     func: Callable,
