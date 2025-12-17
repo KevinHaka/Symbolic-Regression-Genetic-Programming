@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 
-from multiprocessing import Manager
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from inspect import signature
 
@@ -50,7 +49,7 @@ class GPPI(BaseMethod):
         if pysr_params is None: pysr_params = {}
 
         super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
-        self._feature_cache = Manager().dict() # Cache for storing selected features
+        self._feature_cache = {} # Cache for storing selected features
         self.test_size = test_size
         self.val_size = val_size
         self.n_runs = n_runs
@@ -63,6 +62,12 @@ class GPPI(BaseMethod):
 
         return tuple(sorted(X.columns))
     
+    def clear_feature_cache(
+        self
+    ) -> None:
+        """ Clear the feature cache. """
+        self._feature_cache = {}
+
     def precompute_features(
         self, 
         X: pd.DataFrame, 
@@ -171,10 +176,20 @@ class GPPI(BaseMethod):
         """
         Run the GPPI (Genetic Programming with Permutation Importance) method on the provided dataset.
 
-        Args:
+        Parameters
+        ----------
             train_val_test_set: Tuple containing training, validation, and test sets.
-            random_state: Random seed for reproducibility.
+            random_state: Random seed for reproducibility. It is not used in this method
+
+        Returns
+        -------
+        Tuple containing:
+            - training, validation, and test losses (each as np.ndarray),
+            - list of best-equation objects (pd.Series),
+            - list of feature names (List[str]).
         """
+
+        del random_state  # Unused variable
 
         # Unpack the sets
         X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_set
@@ -182,17 +197,16 @@ class GPPI(BaseMethod):
         # Get a unique key for the dataset to cache features
         dataset_key = self._get_dataset_key(X_train)
 
-        # If features not cached, compute and store them
-        if dataset_key not in self._feature_cache.keys():
-            # Combine all data for feature selection
-            X = pd.concat([X_train, X_val, X_test], ignore_index=True)
-            y = np.concatenate([y_train, y_val, y_test])
-
-            # Precompute and cache selected features
-            selected_features = self.precompute_features(X, y, random_state)
+        # If features cached, retrieve them
+        if dataset_key in self._feature_cache.keys():
+            selected_features = self._feature_cache[dataset_key]
 
         else:
-            selected_features = self._feature_cache[dataset_key]
+            raise ValueError(
+                "Features have not been precomputed.\n"+
+                "Please run `precompute_features` or\n" +
+                "`precompute_features_from_pretrained_models` before calling `run`."
+            )
 
         # If no features were selected, choose one feature at random
         if not selected_features:
