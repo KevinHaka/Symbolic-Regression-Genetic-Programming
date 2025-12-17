@@ -69,6 +69,8 @@ class GP(BaseMethod):
             - list of feature names (List[str]).
         """
 
+        del random_state  # Unused variable
+
         # Extract feature names
         features = train_val_test_set[0].columns.tolist() 
         
