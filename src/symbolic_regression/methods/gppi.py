@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from multiprocessing import Manager
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from inspect import signature
 
@@ -49,7 +50,7 @@ class GPPI(BaseMethod):
         if pysr_params is None: pysr_params = {}
 
         super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
-        self._feature_cache = {} # Cache for storing selected features
+        self._feature_cache = Manager().dict() # Cache for storing selected features
         self.test_size = test_size
         self.val_size = val_size
         self.n_runs = n_runs
@@ -66,7 +67,7 @@ class GPPI(BaseMethod):
         self
     ) -> None:
         """ Clear the feature cache. """
-        self._feature_cache = {}
+        self._feature_cache.clear()
 
     def precompute_features(
         self, 
