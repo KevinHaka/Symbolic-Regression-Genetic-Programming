@@ -68,31 +68,16 @@ def select_features(
         y_scaled = StandardScaler().fit_transform(y.reshape(-1, 1))
         X_scaled = pd.DataFrame(X_scaled, columns=remaining_features)
 
-        # HACK: Sampling for large datasets to speed up CMI estimation
-        # Check if dataset exceeds threshold for sampling
-        sample_threshold = 1000
-        should_sample = X_scaled.shape[0] > sample_threshold
-
         # Greedy feature selection loop
         while remaining_features:
             # Track the feature with the highest CMI
             best_feature = ""
             best_value = -np.inf
 
-            # Sample data if necessary for efficiency
-            if should_sample:
-                X_sample, _, y_sample, _ = train_test_split(
-                    X_scaled, y_scaled, test_size=sample_threshold, random_state=rng.integers(0, 2**32)
-                )
-
-            else:
-                X_sample = X_scaled
-                y_sample = y_scaled
-
             # Update CMI calculation parameters
             cmi_kwargs.update({
-                'y': y_sample,
-                'z': X_sample[selected_features] if selected_features else None
+                'y': y_scaled,
+                'z': X_scaled[selected_features] if selected_features else None
             })
 
             # Compute CMI for each remaining feature
@@ -100,7 +85,7 @@ def select_features(
                 # Compute I(feature; target | selected_features)
                 # If no features selected yet, this is just I(feature; target)
                 current_cmi = ee.mi(
-                    x=X_sample[feature], 
+                    x=X_scaled[feature], 
                     **cmi_kwargs
                 )
 
@@ -113,7 +98,7 @@ def select_features(
             # This tests the null hypothesis that I(feature; target | selected_features) = 0
             reject_null = permutation_test(
                 test_statistic = lambda data: ee.mi(x=data, **cmi_kwargs),
-                data = X_sample[best_feature],
+                data = X_scaled[best_feature],
                 observed_statistic = best_value,
                 n_permutations = n_permutations,
                 alpha = alpha,
