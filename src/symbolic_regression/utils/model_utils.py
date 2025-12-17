@@ -1,7 +1,5 @@
 import os
 import dill
-import time
-import datetime
 
 import numpy as np
 import pandas as pd
@@ -301,36 +299,9 @@ def process_task(
         - 'features': List[Any]
         Otherwise, results are only saved to disk as pickle files and None is returned.
     """
-    
-    # TODO: I have to implement it better for reproducibility
-    # create a data directory if it doesn't exist
-    final_dir = os.path.join(output_dir+"_params", dataset_name, method_name)
-    os.makedirs(final_dir, exist_ok=True)
-
-    if method_name in ["GPSHAP", "GPPI"]:
-        method._feature_cache = dict(method._feature_cache) # type: ignore
-    
-    # Pickle function parameters
-    with open(os.path.join(output_dir+"_params", dataset_name, method_name, f"{run}.pkl"), "wb") as f:
-        dill.dump({
-            'dataset_name': dataset_name,
-            'method_name': method_name,
-            'run': run,
-            'train_val_test_set': train_val_test_set,
-            'method': method,
-            "output_dir": output_dir,
-            "return_results": return_results,
-            "random_state": random_state,
-        }, f)
 
     # Set random state for reproducibility
     rng = np.random.default_rng(random_state)
-
-    # logging the start time
-    time_start = time.perf_counter()
-    with open('logfile.log', "a") as f:
-        f.write(f"Process started at {datetime.datetime.now().strftime(r'%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Starting process for {dataset_name} with method {method_name} (run {run})\n")
 
     # Set the random state in the method's PySR parameters
     pysr_rs = rng.integers(0, 2**32) if method.pysr_params["deterministic"] else None
@@ -338,10 +309,6 @@ def process_task(
 
     # Run the method on the provided dataset splits
     temp_losses, temp_best_eqs, temp_features = method.run(train_val_test_set, int(rng.integers(0, 2**32)))
-
-    with open('logfile.log', "a") as f:
-        f.write(f"Ending process for {dataset_name} with method {method_name} (run {run})\n")
-        f.write(f"Total time taken: {time.perf_counter() - time_start:.2f} seconds\n")
 
     # Organize the results into a dictionary
     results = {
@@ -357,14 +324,13 @@ def process_task(
         'features': temp_features
     }
 
-    # Save the results to a file
     # create a data directory if it doesn't exist
     final_dir = os.path.join(output_dir, dataset_name, method_name)
     os.makedirs(final_dir, exist_ok=True)
 
-    filename = f"{run}.pkl"
-    with open(os.path.join(final_dir, filename), "wb") as f:
-        dill.dump(results, f)
+    # Save the results to a file
+    filename = f"run_{run}.pkl"
+    with open(os.path.join(final_dir, filename), "wb") as f: dill.dump(results, f)
 
     # Return results if specified
     if return_results: return results
