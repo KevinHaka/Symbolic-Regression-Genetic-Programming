@@ -4,12 +4,10 @@ import pandas as pd
 from typing import Any, Dict, List, Optional, Tuple
 
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from npeet import entropy_estimators as ee
 
 from ..utils.stats import permutation_test
 from ..utils.system_utils import temporary_seed
-
 
 def select_features(
     X: pd.DataFrame,
@@ -115,5 +113,4 @@ def select_features(
                 remaining_features.remove(best_feature)
 
             else: break
-        
         return selected_features, cmi_values_selected_features
