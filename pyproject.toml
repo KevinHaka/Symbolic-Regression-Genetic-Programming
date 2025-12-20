@@ -14,14 +14,14 @@ dependencies = [
     "dotenv>=0.9.9",
     "sympy>=1.14.0",
     "numpy>=2.3.5",
-    "joblib>=1.5.3",
+    "joblib==1.4.2",
     "tqdm_joblib>=0.0.5",
     "pandas>=2.3.3",
     "pysr>=1.5.9",
     "dill>=0.4.0",
     "shap>=0.50.0",
     "NPEET @ git+https://github.com/gregversteeg/NPEET.git",
-    "pmlb>=1.0.1",
+    "pmlb>=1.0.1.post3",
     "ucimlrepo>=0.0.7"
 ]
 
