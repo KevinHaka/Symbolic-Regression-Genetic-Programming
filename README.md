@@ -56,16 +56,16 @@ python run.py
 
 This project implements methods based on the following papers:
 
-### GPSHAP
+#### GPSHAP
 Wang, C., Chen, Q., Xue, B., & Zhang, M. (2024). Improving Generalization of Genetic Programming for High-Dimensional Symbolic Regression with Shapley Value Based Feature Selection. *Data Science and Engineering*. https://doi.org/10.1007/s41019-024-00270-x
 
-### GPPI
+#### GPPI
 Chen, Q., Zhang, M., & Xue, B. (2017). Feature Selection to Improve Generalization of Genetic Programming for High-Dimensional Symbolic Regression. *IEEE Transactions on Evolutionary Computation*, 21(5), 792-806. https://doi.org/10.1109/TEVC.2017.2683489
 
-### GPCMI
+#### GPCMI
 Kugiumtzis, D. (2013). Direct-coupling information measure from nonuniform embedding. *Physical Review E*, 87(6), 062918. https://doi.org/10.1103/PhysRevE.87.062918
 
-### PySR
+#### PySR
 Cranmer, M. (2023). Interpretable Machine Learning for Science with PySR and SymbolicRegression.jl. *ArXiv, abs/2305.01582*. https://arxiv.org/abs/2305.01582
 
 ## License
