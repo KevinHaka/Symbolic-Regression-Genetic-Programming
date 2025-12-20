@@ -2,6 +2,8 @@
 
 A Python implementation of symbolic regression using genetic programming techniques.
 
+This project was developed as part of a Master's thesis titled "Effective Implementation of Symbolic Regression on High-Dimensional Data".
+
 ## Description
 
 This project implements various genetic programming methods for symbolic regression, including:
