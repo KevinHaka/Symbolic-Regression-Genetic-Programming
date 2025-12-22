@@ -304,7 +304,7 @@ def process_task(
     rng = np.random.default_rng(random_state)
 
     # Set the random state in the method's PySR parameters
-    pysr_rs = rng.integers(0, 2**32) if method.pysr_params["deterministic"] else None
+    pysr_rs = rng.integers(0, 2**32) if method.pysr_params.get("deterministic") else None
     method.pysr_params["random_state"] = pysr_rs
 
     # Run the method on the provided dataset splits
