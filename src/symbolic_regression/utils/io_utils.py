@@ -76,6 +76,7 @@ def persist(
     execute: bool = True,
     save_result: bool = False,
     exclude_keys: Optional[List[str]] = None,
+    extra_data: Optional[Dict[str, Any]] = None,
     **kwargs
 ) -> Any:
     """
@@ -95,8 +96,8 @@ def persist(
     filename : str, default='data.pkl'
         Name of the pickle file to create.
     execute : bool, default=True
-        Whether to execute the function if provided. If False, only saves 
-        function and args without execution.
+        Whether to execute the function if provided. If False, saves only
+        the data without executing the function.
     save_result : bool, default=False
         Whether to save the function's return value to the pickle file. Only 
         applicable when execute=True. Useful for reproducibility but may 
@@ -105,6 +106,10 @@ def persist(
         List of kwargs keys to exclude from pickling. Useful for excluding
         non-picklable objects like multiprocessing managers. The function will
         still execute with these arguments, they just won't be saved.
+    extra_data : dict, optional
+        Additional data to store in the pickle file that won't be passed to 
+        the function. Useful for storing context, configuration, or metadata 
+        alongside the function call without affecting execution.
     *args
         Positional arguments to persist and pass to func.
     **kwargs
@@ -118,6 +123,11 @@ def persist(
         otherwise the pickle file path (str).
     """
 
+    # Helper function to save data
+    def _save_data(data_to_save, pickle_path):
+        with open(pickle_path, 'wb') as f:
+            dill.dump(data_to_save, f)
+
     # Create pickle directory if it doesn't exist
     os.makedirs(pickle_dir, exist_ok=True)
     
@@ -129,20 +139,17 @@ def persist(
         exclude_keys = [k for k in exclude_keys if k in kwargs]
         filtered_kwargs = {k: v for k, v in kwargs.items() if k not in exclude_keys}
 
-    else:
-        exclude_keys = []
-        filtered_kwargs = kwargs
+    else: filtered_kwargs = kwargs
     
     # Collect metadata
     metadata = {
         'timestamp': timestamp.isoformat(" "),
         'python_version': sys.version,
         'hostname': socket.gethostname(),
-        'excluded_keys': exclude_keys,
     }
     
     # Add function metadata if function is provided
-    if func:
+    if isinstance(func, Callable):
         # Handle partial functions
         if isinstance(func, partial):
             actual_func = func.func
@@ -157,59 +164,64 @@ def persist(
             'function_name': function_name,
             'function_module': function_module,
         })
-    
-    result = None # Function execution result
-    error = None # Exception if occurred during execution
-    
-    # Determine storage mode
-    if not execute or func is None:
-        # Data storage mode: save filtered kwargs as flat data structure
-        data = {**filtered_kwargs, 'metadata': metadata, 'status': 'success'}
 
-    else:
-        # Function execution mode: save function, args, filtered kwargs
-        data = {
-            'function': func,
-            'args': args,
-            'kwargs': filtered_kwargs,  # Save filtered kwargs
-            'metadata': metadata,
-            'status': 'success'
-        }
-        
-        # Execute the function and capture result/error
-        execution_start = time.time()
-        
-        try:
-            result = func(*args, **kwargs)  # Execute with all kwargs
-            execution_duration = time.time() - execution_start
-            
-            # Save result if requested
-            if save_result: data['result'] = result
-            
-        except Exception as e:
-            execution_duration = time.time() - execution_start
-            error = e
-
-            data['status'] = 'failure'
-            data['error'] = {
-                'type': type(e).__name__,
-                'message': str(e),
-                'traceback': traceback.format_exc()
-            }
+    data = {
+        'args': args,
+        'kwargs': filtered_kwargs,
+        'excluded_keys': exclude_keys,
+        'extra_data': extra_data,
+        'metadata': metadata,
+    }
     
-        # Record execution duration
-        data['metadata']['execution_duration_seconds'] = execution_duration
-    
-    # Save everything to pickle file
+    result = None # Placeholder for function result
     pickle_path = os.path.join(pickle_dir, filename)
-    with open(pickle_path, 'wb') as f:
-        dill.dump(data, f)
     
-    # Re-raise the exception if one occurred in execution mode
-    if error: raise error
+    if isinstance(func, Callable):
+        data['func'] = func
+
+        if execute:
+            data['metadata']['status'] = 'running'
+            error = None
+            
+            # Save before execution
+            _save_data(data, pickle_path)
+            
+            # Execute the function and capture result/error
+            execution_start = time.time()
+            
+            try:
+                result = func(*args, **kwargs)  # Execute with all kwargs
+                execution_duration = time.time() - execution_start
+                
+                # Update metadata with success
+                data['metadata']['status'] = 'success'
+                data['metadata']['execution_duration_seconds'] = execution_duration
+                if save_result: data['result'] = result
+                
+            except Exception as e:
+                execution_duration = time.time() - execution_start
+                error = e
+
+                # Update metadata with failure
+                data['metadata']['status'] = 'failure'
+                data['metadata']['execution_duration_seconds'] = execution_duration
+                data['metadata']['error'] = {
+                    'type': type(e).__name__,
+                    'message': str(e),
+                    'traceback': traceback.format_exc()
+                }
+        
+            # Save final results after execution
+            _save_data(data, pickle_path)
+            
+            # Re-raise the exception if one occurred
+            if error: raise error
+    
+    # Save data for non-execution modes
+    else: _save_data(data, pickle_path)
     
     # Return result or pickle path
-    return result if (func and execute) else pickle_path
+    return result if (isinstance(func, Callable) and execute) else pickle_path
 
 def send_email(
     subject: str, 
