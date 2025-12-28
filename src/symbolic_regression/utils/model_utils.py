@@ -3,11 +3,13 @@ import dill
 
 import numpy as np
 import pandas as pd
+import sympy as sp
 
 from inspect import signature
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pysr import PySRRegressor
+from pysr.export_numpy import CallableEquation
 from sklearn.model_selection import train_test_split
 
 from ..methods.base import BaseMethod
@@ -170,16 +172,32 @@ def fit_and_evaluate_best_equation(
     # Total iterations from params
     niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
 
-    # Random state for reproducibility
-    random_state = pysr_params.get("random_state", None)
-    rng = np.random.default_rng(random_state)
-    
     # Ensure niterations is an integer
     assert isinstance(niterations, int), "niterations must be an integer."
 
-    # Set default intervals if not provided
     if record_interval is None: record_interval = niterations
     if resplit_interval is None: resplit_interval = niterations
+
+    # Handle the case where no features are selected (empty DataFrame)
+    if train_val_test_set[0].empty:
+        # Get complexity_of_constants from pysr_params or default
+        complexity_of_constants = pysr_params.get(
+            "complexity_of_constants", 
+            signature(PySRRegressor).parameters['complexity_of_constants'].default
+        )
+
+        return _create_mean_baseline(
+            y_train=train_val_test_set[3],
+            y_val=train_val_test_set[4],
+            y_test=train_val_test_set[5],
+            loss_function=loss_function,
+            complexity_of_constants=complexity_of_constants,
+            n_records=niterations // record_interval,
+        )
+
+    # Random state for reproducibility
+    random_state = pysr_params.get("random_state", None)
+    rng = np.random.default_rng(random_state)
 
     # Build event schedule
     record_points = list(range(record_interval, niterations + 1, record_interval))
@@ -334,3 +352,67 @@ def process_task(
 
     # Return results if specified
     if return_results: return results
+
+def _create_mean_baseline(
+    y_train: np.ndarray,
+    y_val: np.ndarray,
+    y_test: np.ndarray,
+    loss_function: Callable[[np.ndarray, np.ndarray], np.float64],
+    complexity_of_constants: int,
+    n_records: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[pd.Series]]:
+    """
+    Create a baseline model that predicts the mean of y_train for all samples.
+    
+    This function is used when no features are selected or available, returning
+    a constant model that predicts the training set mean. The losses are 
+    replicated across all recording intervals.
+    
+    Parameters
+    ----------
+    y_train : np.ndarray
+        Training target values.
+    y_val : np.ndarray
+        Validation target values.
+    y_test : np.ndarray
+        Test target values.
+    loss_function : Callable
+        Function to compute the loss between true and predicted values.
+    complexity_of_constants : int
+        Complexity value assigned to constant.
+    n_records : int
+        Number of recording intervals for which to replicate losses.
+    
+    Returns
+    -------
+    training_losses : np.ndarray
+        Training losses replicated n_records times.
+    validation_losses : np.ndarray
+        Validation losses replicated n_records times.
+    test_losses : np.ndarray
+        Test losses replicated n_records times.
+    best_eqs : List[pd.Series]
+        Single-element list containing the baseline equation metadata.
+    """
+    
+    # Compute mean once and reuse
+    mean_value = y_train.mean()
+    y_train_pred = np.full_like(y_train, mean_value)
+    y_val_pred = np.full_like(y_val, mean_value)
+    y_test_pred = np.full_like(y_test, mean_value)
+    
+    # Compute losses for all splits
+    training_losses = np.ones(n_records) * loss_function(y_train, y_train_pred)
+    validation_losses = np.ones(n_records) * loss_function(y_val, y_val_pred)
+    test_losses = np.ones(n_records) * loss_function(y_test, y_test_pred)
+    
+    # Create baseline equation metadata
+    best_eqs = [pd.Series({
+        "complexity": complexity_of_constants,
+        "loss": loss_function(y_train, y_train_pred),
+        "equation": str(mean_value),
+        "sympy_format": sp.Float(mean_value),
+        "lambda_format": CallableEquation(mean_value, [])
+    })]
+    
+    return training_losses, validation_losses, test_losses, best_eqs
