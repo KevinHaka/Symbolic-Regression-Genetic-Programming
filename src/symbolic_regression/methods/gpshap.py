@@ -214,10 +214,6 @@ class GPSHAP(BaseMethod):
                 "Please run `precompute_features` or\n" +
                 "`precompute_features_from_pretrained_models` before calling `run`."
             )
-        
-        # If no features were selected, choose one feature at random
-        if not selected_features:
-            selected_features = np.random.choice(X_train.columns, 1).tolist()
 
         # Create a new data split with only the selected features
         train_val_test_set_filtered = (

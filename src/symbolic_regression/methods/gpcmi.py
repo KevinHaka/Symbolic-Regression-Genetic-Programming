@@ -83,10 +83,6 @@ class GPCMI(BaseMethod):
             random_state=random_state
         )
 
-        # If no features were selected, choose one feature at random
-        if not selected_features:
-            selected_features = np.random.choice(X_train.columns, 1).tolist()
-
         # Filter datasets to only include selected features
         train_val_test_set_filtered = (
             X_train[selected_features],
@@ -97,9 +93,6 @@ class GPCMI(BaseMethod):
             y_test,
         )
 
-        # Get feature names
-        features = train_val_test_set_filtered[0].columns.tolist()
-
         # Fit and evaluate the best equation using the filtered data
         training_losses, validation_losses, test_losses, best_eqs = fit_and_evaluate_best_equation(
             train_val_test_set_filtered,
@@ -109,4 +102,4 @@ class GPCMI(BaseMethod):
             self.pysr_params
         )
 
-        return (training_losses, validation_losses, test_losses), best_eqs, features
+        return (training_losses, validation_losses, test_losses), best_eqs, selected_features
