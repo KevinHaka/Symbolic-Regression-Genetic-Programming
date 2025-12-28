@@ -1,4 +1,3 @@
-from functools import partial
 from dotenv import load_dotenv, find_dotenv
 
 # Find and load .env file
@@ -8,6 +7,8 @@ import os
 import datetime
 import sympy as sp
 
+from copy import deepcopy  
+from functools import partial
 from numpy import arange, array
 from numpy.random import default_rng
 from joblib import delayed
@@ -38,8 +39,7 @@ def main() -> None:
     # create a unique output directory for this run
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_output_dir = os.path.join(data_dir, timestamp)
-    pickle_dir = "_".join([run_output_dir, "params"])
-    # os.makedirs(run_output_dir)
+    run_params_dir = "_".join([run_output_dir, "params"])
 
     # ---------------- Parameters ----------------
 
@@ -62,12 +62,12 @@ def main() -> None:
     n_submodels = 2
 
     # General
-    n_runs = 6
+    n_runs = 2
     test_size = 0.2
     val_size = 0.2
     record_interval = 10
     resplit_interval = 10
-    n_jobs = 1
+    n_jobs = -1
     random_state = 27
 
     # Set random seed for reproducibility
@@ -193,11 +193,10 @@ def main() -> None:
             delayed_tasks.extend(
                 delayed(persist)(
                     func=partial(warnings_manager, func=process_task),
-                    pickle_dir=os.path.join(pickle_dir, method_name),
+                    pickle_dir=os.path.join(run_params_dir, dataset_name, method_name),
                     filename=f"run_{run}.pkl",
                     execute=True,
                     save_result=False,
-                    exclude_keys=['method'],
                     filters=warning_filters,
                     dataset_name=dataset_name, 
                     method_name=method_name, 
@@ -274,17 +273,24 @@ def main() -> None:
         # Execute precomputing tasks in parallel
         ParallelPbar("Precomputing features for dependent methods")(n_jobs=n_jobs)(preparing_tasks)
 
+        # Create picklable copies of dependent methods
+        picklable_methods = {}
+        for method_name, method in dependent_methods.items():
+            picklable_methods[method_name] = deepcopy(method)
+            picklable_methods[method_name]._feature_cache = dict(picklable_methods[method_name]._feature_cache)
+
         # Iterate over datasets to create dependent method tasks
         for dataset_name, dataset in datasets.items():
             for method_name, method in dependent_methods.items():
                 delayed_tasks.extend([
                     delayed(persist)(
                         func=partial(warnings_manager, func=process_task),
-                        pickle_dir=os.path.join(pickle_dir, method_name),
+                        pickle_dir=os.path.join(run_params_dir, dataset_name, method_name),
                         filename=f"run_{run}.pkl",
                         execute=True,
                         save_result=False,
                         exclude_keys=['method'],
+                        extra_data={'method': picklable_methods[method_name]},
                         filters=warning_filters,
                         dataset_name=dataset_name, 
                         method_name=method_name, 
