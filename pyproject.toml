@@ -7,14 +7,14 @@ name = "symbolic-regression"
 version = "0.1.0"
 description = "Symbolic Regression using Genetic Programming"
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
+license = { file = "LICENSE" }
+requires-python = ">=3.10, <3.13"
 
 dependencies = [
-    "dotenv>=0.9.9",
+    "python-dotenv>=0.9.9",
     "sympy>=1.14.0",
     "numpy>=2.3.5",
-    "joblib>=1.5.3",
+    "joblib>=1.4.2, <1.5.0",
     "tqdm_joblib>=0.0.5",
     "pandas>=2.3.3",
     "pysr>=1.5.9",
@@ -24,6 +24,10 @@ dependencies = [
     "pmlb>=1.0.1.post3",
     "ucimlrepo>=0.0.7",
     "seaborn>=0.13.2"
+]
+
+authors = [
+    { name = "Kevin Haka", email = "kevihaka@gmail.com" }
 ]
 
 [project.urls]
