@@ -15,25 +15,43 @@ This project implements various genetic programming methods for symbolic regress
 
 ## Installation
 
-1. Create a virtual environment:
+1. Clone the repository (optional, if you want to work locally):
+
+```bash
+git clone https://github.com/KevinHaka/Symbolic-Regression-Genetic-Programming.git
+```
+
+```bash
+cd Symbolic-Regression-Genetic-Programming
+```
+
+2. Create a virtual environment:
 
 ```bash
 python -m venv venv
-venv\Scripts\activate  # On Windows
-# source venv/bin/activate  # On Linux/Mac
 ```
 
-2. Install the package:
+```bash
+venv\Scripts\activate  # On Windows
+```
 
 ```bash
-# From local directory
-pip install -e .
+source venv/bin/activate  # On Linux/Mac
+```
 
-# Or directly from GitHub
+3. Install the package:
+
+```bash
+# From local directory (if cloned)
+pip install -e .
+```
+
+```bash
+# Or directly from GitHub (without cloning)
 pip install git+https://github.com/KevinHaka/Symbolic-Regression-Genetic-Programming.git
 ```
 
-3. Install Julia dependencies for PySR:
+4. Install Julia dependencies for PySR:
 
 ```bash
 python -c "from pysr import PySRRegressor; PySRRegressor()"
@@ -49,6 +67,9 @@ python -c "from pysr import PySRRegressor; PySRRegressor()"
 
 ```bash
 cd examples
+```
+
+```bash
 python run.py
 ```
 
