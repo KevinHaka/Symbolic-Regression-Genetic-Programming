@@ -95,12 +95,12 @@ def main() -> None:
         "population_size": 20,
         "niterations": 20,
         "binary_operators": ["+", "-", "*"],
-        "unary_operators": ["sqrt", "inv(x) = 1/x", "sin", "atan"],
+        "unary_operators": ["sqrt", "inv", "sin", "atan"],
         "extra_sympy_mappings": {
-            "inv": lambda x: 1/x,
-            "sqrt": lambda x, evaluate=False: sp.sqrt(x, evaluate=evaluate),
-            "sin": lambda x: sp.sin(x),
-            "atan": lambda x: sp.atan(x),
+            # "inv": lambda x: sp.Pow(x, -1),
+            # "sqrt": lambda x: sp.sqrt(x),
+            # "sin": lambda x: sp.sin(x),
+            # "atan": lambda x: sp.atan(x),
         },
 
         "parallelism": "serial",
