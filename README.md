@@ -28,15 +28,15 @@ cd Symbolic-Regression-Genetic-Programming
 2. Create a virtual environment:
 
 ```bash
-python -m venv venv
+python -m venv .venv
 ```
 
 ```bash
-venv\Scripts\activate  # On Windows
+.venv\Scripts\activate  # On Windows
 ```
 
 ```bash
-source venv/bin/activate  # On Linux/Mac
+source .venv/bin/activate  # On Linux/Mac
 ```
 
 3. Install the package:
