@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+import copy
 from typing import Any, Callable, Dict, Optional, Tuple, List, Type
 from inspect import signature
 
@@ -78,7 +79,7 @@ class RFGP(BaseMethod):
         super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
         self.n_submodels = n_submodels
         self.method_class = method_class
-        self.method_params = method_params
+        self.method_params = copy.deepcopy(method_params)
 
         # Distribute records among submodels, including remainders
         base_records_per_submodel = self.n_records // self.n_submodels
