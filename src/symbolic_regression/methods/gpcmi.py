@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Optional, Tuple, List
 from .gp import GP
 from .base import BaseMethod
 from ..utils.model_utils import fit_and_evaluate_best_equation
-from ..feature_selections.cmi import select_features as cmi_sf
+from ..feature_selections.cminn import select_features as cmi_sf
 
 class GPCMI(BaseMethod):
     def __init__(

@@ -18,7 +18,7 @@ def select_features(
     random_state: Optional[int] = None
 ) -> Tuple[List[str], List[float]]:
     """
-    Conditional Mutual Information (CMI) feature selection.
+    Conditional Mutual Information with Nearest Neighbors (CMINN) feature selection algorithm.
 
     This module implements a greedy feature selection algorithm based on
     conditional mutual information estimated with k-NN entropy estimators
