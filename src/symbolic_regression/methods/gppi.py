@@ -8,15 +8,15 @@ from inspect import signature
 from .gp import GP
 from .base import BaseMethod
 from ..utils.model_utils import fit_and_evaluate_best_equation
-from ..feature_selections.pi import select_features as pi_sf
-from ..feature_selections.pi import select_features_from_pretrained_models as pi_pretrained_sf
+from ..feature_selections.gppi import select_features as gppi_sf
+from ..feature_selections.gppi import select_features_from_pretrained_models as gppi_pretrained_sf
 
 class GPPI(BaseMethod):
     def __init__(
         self,
-        test_size: float = signature(pi_sf).parameters['test_size'].default,
-        val_size: float = signature(pi_sf).parameters['val_size'].default,
-        n_runs: int = signature(pi_sf).parameters['n_runs'].default,
+        test_size: float = signature(gppi_sf).parameters['test_size'].default,
+        val_size: float = signature(gppi_sf).parameters['val_size'].default,
+        n_runs: int = signature(gppi_sf).parameters['n_runs'].default,
         loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = signature(GP).parameters['loss_function'].default,
         record_interval: Optional[int] = 1,
         resplit_interval: Optional[int] = None,
@@ -100,7 +100,7 @@ class GPPI(BaseMethod):
             }
 
             # Compute selected features using SHAP
-            selected_features, _ = pi_sf(
+            selected_features, _ = gppi_sf(
                 X, y,
                 test_size=self.test_size,
                 val_size=self.val_size,
@@ -143,10 +143,11 @@ class GPPI(BaseMethod):
         # If features not cached, compute and store them
         if dataset_key not in self._feature_cache:
             # Compute selected features using SHAP from pretrained models
-            selected_features = pi_pretrained_sf(
+            selected_features = gppi_pretrained_sf(
                 test_sets=test_sets,
                 err_org=err_org,
                 gp_equations=gp_equations,
+                loss_function=self.loss_function,
                 random_state=random_state
             )[0]
 

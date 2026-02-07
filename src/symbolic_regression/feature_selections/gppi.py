@@ -1,10 +1,9 @@
 import numpy as np
 import pandas as pd
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..methods.gp import GP
-from ..utils.losses import rmse_loss
 from ..utils.data_utils import train_val_test_split
 
 def select_features(
@@ -64,6 +63,7 @@ def select_features(
         test_sets=test_sets,
         err_org=err_org,
         gp_equations=gp_equations,
+        loss_function=gp.loss_function,
         random_state=random_state
     )
     
@@ -73,6 +73,7 @@ def select_features_from_pretrained_models(
     test_sets: Sequence[Tuple[pd.DataFrame, np.ndarray]],
     err_org: np.ndarray,
     gp_equations: Sequence[pd.Series],
+    loss_function: Callable,
     random_state: Optional[int] = None
 ) -> Tuple[List[str], List[float]]:
     """ 
@@ -82,6 +83,7 @@ def select_features_from_pretrained_models(
         test_sets (Sequence[Tuple[pd.DataFrame, np.ndarray]]): Sequence of test sets (X_test, y_test).
         err_org (np.ndarray): Original errors from the GP models on the train sets.
         gp_equations (Sequence[pd.Series]): Sequence of GP equations.
+        loss_function (Callable): Loss function used to evaluate the models.
         random_state (Optional[int]): Random seed for reproducibility.
     
     Returns:
@@ -104,7 +106,7 @@ def select_features_from_pretrained_models(
             X_test_pmt = X_test.copy() # Create a copy of the test set
             X_test_pmt[var] = rng.permutation(X_test_pmt[var]) # Permute the selected feature
             y_pred = equation.lambda_format(X_test_pmt) # Predict using the permuted test set
-            err_pmt = rmse_loss(y_test, y_pred) # Compute error with permuted feature
+            err_pmt = loss_function(y_test, y_pred) # Compute error with permuted feature
             raw_FI[var][n_run] = err_pmt - err_org[n_run] # Store the raw feature importance
 
     scaled_FI = {var: np.sqrt(length)*arr.mean() / arr.std() if (arr.std() > 0) else 0.0 
