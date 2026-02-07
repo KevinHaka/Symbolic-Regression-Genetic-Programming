@@ -62,7 +62,7 @@ def main() -> None:
     n_submodels = 2
 
     # General
-    n_runs = 2
+    n_runs = 6
     test_size = 0.2
     val_size = 0.2
     record_interval = 10
@@ -80,10 +80,10 @@ def main() -> None:
         #"Friedman1",
         #"Friedman2",
         #"Friedman3",
-        # "542_pollution",
+        "542_pollution",
         # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         # "505_tecator",
-    	# ("Communities and Crime", "CCN"),
+    	("Communities and Crime", "CCN"),
         # ("Communities and Crime Unnormalized", "CCUN"),
         # ("Superconductivty Data", "Superconductivity"), 
     ]
@@ -91,9 +91,9 @@ def main() -> None:
 
     # PySR parameters
     pysr_params = {
-        "populations": 2,
-        "population_size": 20,
-        "niterations": 20,
+        "populations": 3,
+        "population_size": 30,
+        "niterations": 50,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv", "sin", "atan"],
         "extra_sympy_mappings": {
@@ -151,11 +151,11 @@ def main() -> None:
 
     independent_methods = {
         "GP": GP(**gp_params),
-        # "GPCMI": GPCMI(**gpcmi_params),
-        # "RFGPCMI": RFGP(**rfgpcmi_params),
+        "GPCMI": GPCMI(**gpcmi_params),
+        "RFGPCMI": RFGP(**rfgpcmi_params),
     }
     dependent_methods = {
-        # "GPPI": GPPI(**gppi_params),
+        "GPPI": GPPI(**gppi_params),
         "GPSHAP": GPSHAP(**gpshap_params),
     }
     all_methods = {**independent_methods, **dependent_methods}
