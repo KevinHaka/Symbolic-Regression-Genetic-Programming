@@ -8,16 +8,16 @@ from inspect import signature
 from .gp import GP
 from .base import BaseMethod
 from ..utils.model_utils import fit_and_evaluate_best_equation
-from ..feature_selections.shap import select_features as shap_sf
-from ..feature_selections.shap import select_features_from_pretrained_models as shap_pretrained_sf
+from ..feature_selections.gpshap import select_features as gpshap_sf
+from ..feature_selections.gpshap import select_features_from_pretrained_models as gpshap_pretrained_sf
 
 class GPSHAP(BaseMethod):
     def __init__(
         self,
-        test_size: float = signature(shap_sf).parameters['test_size'].default,
-        val_size: float = signature(shap_sf).parameters['val_size'].default,
-        n_runs: int = signature(shap_sf).parameters['n_runs'].default,
-        n_top_features: int = signature(shap_sf).parameters['n_top_features'].default,
+        test_size: float = signature(gpshap_sf).parameters['test_size'].default,
+        val_size: float = signature(gpshap_sf).parameters['val_size'].default,
+        n_runs: int = signature(gpshap_sf).parameters['n_runs'].default,
+        n_top_features: int = signature(gpshap_sf).parameters['n_top_features'].default,
         loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = signature(GP).parameters['loss_function'].default,
         record_interval: Optional[int] = 1,
         resplit_interval: Optional[int] = None,
@@ -105,7 +105,7 @@ class GPSHAP(BaseMethod):
             }
 
             # Compute selected features using SHAP
-            selected_features = shap_sf(
+            selected_features = gpshap_sf(
                 X, y,
                 test_size=self.test_size,
                 val_size=self.val_size,
@@ -149,7 +149,7 @@ class GPSHAP(BaseMethod):
         # If features not cached, compute and store them
         if dataset_key not in self._feature_cache:
             # Compute selected features using SHAP from pretrained models
-            selected_features, _ = shap_pretrained_sf(
+            selected_features, _ = gpshap_pretrained_sf(
                 X_trains,
                 gp_equations,
                 n_top_features=n_top_features,
