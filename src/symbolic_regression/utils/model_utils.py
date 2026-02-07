@@ -413,6 +413,6 @@ def _create_mean_baseline(
         "equation": str(mean_value),
         "sympy_format": sp.Float(mean_value),
         "lambda_format": CallableEquation(mean_value, [])
-    })]
+    }) for _ in range(n_records)]
     
     return training_losses, validation_losses, test_losses, best_eqs
