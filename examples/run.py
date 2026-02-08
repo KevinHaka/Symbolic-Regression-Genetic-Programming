@@ -21,7 +21,10 @@ from symbolic_regression.methods.gpcmi import GPCMI
 from symbolic_regression.methods.rfgp import RFGP
 
 from symbolic_regression.utils.datasets import load_datasets
-from symbolic_regression.utils.data_utils import organize_results, results_to_dataframe, train_val_test_split
+from symbolic_regression.utils.data_utils import (
+    organize_results, results_to_dataframe, 
+    train_val_test_split, get_numpy_pandas_size
+)
 from symbolic_regression.utils.io_utils import load_pickle_files, persist, send_email
 from symbolic_regression.utils.system_utils import timeit, warnings_manager
 from symbolic_regression.utils.model_utils import process_task
@@ -62,13 +65,13 @@ def main() -> None:
     n_submodels = 2
 
     # General
-    n_runs = 6
+    n_runs = 2
     test_size = 0.2
     val_size = 0.2
     record_interval = 10
     resplit_interval = 10
     n_jobs = -1
-    random_state = 27
+    random_state = 2026
 
     # Set random seed for reproducibility
     rng = default_rng(random_state)
@@ -76,14 +79,14 @@ def main() -> None:
     # Choose datasets to run
     dataset_names = [
         "F1",
-        # "F2",
-        #"Friedman1",
-        #"Friedman2",
-        #"Friedman3",
-        "542_pollution",
+        "F2",
+        "Friedman1",
+        "Friedman2",
+        "Friedman3",
+        # "542_pollution",
         # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         # "505_tecator",
-    	("Communities and Crime", "CCN"),
+    	# ("Communities and Crime", "CCN"),
         # ("Communities and Crime Unnormalized", "CCUN"),
         # ("Superconductivty Data", "Superconductivity"), 
     ]
@@ -170,6 +173,7 @@ def main() -> None:
 
     delayed_tasks = [] # To hold all delayed tasks
     splits = {} # To hold data splits for each dataset
+    exclude_split = {} # To track whether to exclude train_val_test_set from pickling
         
     # Iterate over datasets
     for dataset_name, dataset in datasets.items():
@@ -181,6 +185,10 @@ def main() -> None:
             delayed(train_val_test_split)(X, y, test_size, val_size, rng.integers(0, 2**32))
             for _ in range(n_runs)
         )
+
+        # Calculate the size of the splits to determine if they should be excluded from pickling
+        split_size = sum([get_numpy_pandas_size(obj) for obj in splits[dataset_name][0]])
+        exclude_split[dataset_name] = split_size > 1024 ** 2
 
         # Iterate over independent methods
         for method_name, method in independent_methods.items():
@@ -197,6 +205,7 @@ def main() -> None:
                     filename=f"run_{run}.pkl",
                     execute=True,
                     save_result=False,
+                    exclude_keys=["train_val_test_set" if exclude_split[dataset_name] else None],
                     filters=warning_filters,
                     dataset_name=dataset_name, 
                     method_name=method_name, 
@@ -289,7 +298,7 @@ def main() -> None:
                         filename=f"run_{run}.pkl",
                         execute=True,
                         save_result=False,
-                        exclude_keys=['method'],
+                        exclude_keys=['method', "train_val_test_set" if exclude_split[dataset_name] else None],
                         extra_data={'method': picklable_methods[method_name]},
                         filters=warning_filters,
                         dataset_name=dataset_name, 
