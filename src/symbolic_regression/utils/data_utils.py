@@ -189,3 +189,39 @@ def train_val_test_split(
     )
 
     return X_train, X_val, X_test, y_train, y_val, y_test
+
+def get_numpy_pandas_size(
+    obj: Any
+) -> int:
+    """
+    Get memory size in bytes for numpy arrays or pandas DataFrames/Series.
+    
+    Parameters
+    ----------
+    obj : numpy.ndarray, pandas.DataFrame or pandas.Series
+        Object to measure.
+        
+    Returns
+    -------
+    int
+        Memory size in bytes.
+    """
+
+    # pandas DataFrame
+    if isinstance(obj, pd.DataFrame):
+        return obj.memory_usage(deep=True).sum()
+    
+    # pandas Series
+    elif isinstance(obj, pd.Series):
+        return obj.memory_usage(deep=True)
+    
+    # numpy array 
+    elif isinstance(obj, np.ndarray):
+        return obj.nbytes
+    
+    # Unsupported type
+    else:
+        raise TypeError(
+            f"Expected numpy array or pandas DataFrame/Series, "
+            f"got {type(obj).__name__}"
+        )
