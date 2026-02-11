@@ -47,7 +47,7 @@ def get_shap_values(
 
         # Compute SHAP values for each feature in the equation
         shap_values = explainer.shap_values(X_train[str_variables], silent=True)
-        feature_shap_values = np.mean(shap_values, axis=0)
+        feature_shap_values = np.mean(np.abs(shap_values), axis=0)
 
     else:
         str_variables = []
@@ -158,7 +158,7 @@ def select_features_from_pretrained_models(
         str_variables, feature_shap_values = get_shap_values(X_train, gp_equation, rng.integers(0, 2**32))
 
         # Aggregate SHAP values across equations
-        for feature_shap_value, var_name in zip(feature_shap_values, str_variables):
+        for var_name, feature_shap_value in zip(str_variables, feature_shap_values):
             mean_shap_values[var_name] += feature_shap_value
 
     # Normalize by number of equations after aggregation
