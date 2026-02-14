@@ -35,7 +35,23 @@ class BaseMethod(ABC):
 
         # Determine number of records based on niterations and record_interval
         niterations = self.pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
-        self.n_records = niterations // self.record_interval
+        self.n_records = niterations // self.record_interval if self.record_interval else 1
+
+        # Ensure niterations is an integer
+        assert isinstance(niterations, int), "niterations must be an integer."
+
+        # Set default record and resplit intervals if not provided
+        record_interval = self.record_interval if self.record_interval else niterations
+        resplit_interval = self.resplit_interval if self.resplit_interval else niterations
+        
+        # Determine record and resplit points
+        self.record_points = list(range(record_interval, niterations + 1, record_interval))
+        self.resplit_points = list(range(resplit_interval, niterations, resplit_interval))
+
+        # Build event schedule for recording and resplitting
+        self.events: Dict[int, set] = {}
+        for it in self.record_points: self.events.setdefault(it, set()).add("record")
+        for it in self.resplit_points: self.events.setdefault(it, set()).add("resplit")
 
     @abstractmethod
     def run(
