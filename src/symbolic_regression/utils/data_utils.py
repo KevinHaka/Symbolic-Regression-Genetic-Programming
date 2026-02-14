@@ -170,23 +170,73 @@ def train_val_test_split(
         Tuple containing (X_train, X_val, X_test, y_train, y_val, y_test).
     """
 
+    # Validate input sizes
+    if val_size + test_size > 1.0:
+        raise ValueError("The sum of val_size and test_size must be less than or equal to 1.0.")
+    
+    elif val_size < 0.0 or test_size < 0.0:
+        raise ValueError("val_size and test_size must be non-negative.")
+
+
+    # Handle edge cases where test_size or val_size is 1.0 or 0.0
+    if test_size == 1.0:
+        return pd.DataFrame(columns=X.columns), pd.DataFrame(columns=X.columns), X, np.array([]), np.array([]), y
+    
+    elif val_size == 1.0:
+        return pd.DataFrame(columns=X.columns), X, pd.DataFrame(columns=X.columns), np.array([]), y, np.array([])
+    
+    elif test_size == 0.0 and val_size == 0.0:
+        return X, pd.DataFrame(columns=X.columns), pd.DataFrame(columns=X.columns), y, np.array([]), np.array([])
+
     # Initialize random number generator
     rng = np.random.default_rng(random_state)
-    
-    # Adjust validation size
-    adjusted_val_size = val_size / (1 - test_size) 
 
-    # Split the data into train/val/test sets
-    X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X, y, 
-        test_size=test_size, 
-        random_state=rng.integers(0, 2**32)
-    )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train_val, y_train_val, 
-        test_size=adjusted_val_size, 
-        random_state=rng.integers(0, 2**32)
-    )
+    # Split the data according to the specified sizes
+    if test_size + val_size == 1.0:
+        X_train = pd.DataFrame(columns=X.columns)
+        y_train = np.array([])
+
+        X_val, X_test, y_val, y_test = train_test_split(
+            X, y, 
+            test_size=test_size, 
+            random_state=rng.integers(0, 2**32)
+        )
+
+    elif test_size == 0.0:
+        X_test = pd.DataFrame(columns=X.columns)
+        y_test = np.array([])
+
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, 
+            test_size=val_size, 
+            random_state=rng.integers(0, 2**32)
+        )
+    
+    elif val_size == 0.0:
+        X_val = pd.DataFrame(columns=X.columns)
+        y_val = np.array([])
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, 
+            test_size=test_size, 
+            random_state=rng.integers(0, 2**32)
+        )
+
+    else:
+        # Adjust validation size
+        adjusted_val_size = val_size / (1 - test_size) 
+
+        # Split the data into train/val/test sets
+        X_train_val, X_test, y_train_val, y_test = train_test_split(
+            X, y, 
+            test_size=test_size, 
+            random_state=rng.integers(0, 2**32)
+        )
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train_val, y_train_val, 
+            test_size=adjusted_val_size, 
+            random_state=rng.integers(0, 2**32)
+        )
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
