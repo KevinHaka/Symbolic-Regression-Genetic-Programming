@@ -5,15 +5,16 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..methods.gp import GP
 from ..utils.data_utils import train_val_test_split
+from ..utils.losses import nrmse_loss
 
 def select_features(
     X: pd.DataFrame,
     y: np.ndarray,
-    test_size: float = 0.2,
     val_size: float = 0.2,
+    sub_test_size: float = 0.3,
     n_runs: int = 30,
     random_state: Optional[int] = None,
-    gp_params: Optional[Dict[str, Any]] = None
+    pysr_params: Optional[Dict[str, Any]] = None
 ) -> Tuple[List[str], List[float]]:
     """
     Select features using permutation importance method with GP (Genetic Programming).
@@ -21,21 +22,28 @@ def select_features(
     Args:
         X (pd.DataFrame): Feature DataFrame.
         y (np.ndarray): Target variable.
-        test_size (float): Proportion of data for testing.
         val_size (float): Proportion of data for validation.
+        sub_test_size (float): Proportion of data for sub-testing.
         n_runs (int): Number of GP runs.
         random_state (Optional[int]): Random seed for reproducibility.
-        gp_params (Optional[Dict[str, Any]]): Parameters for GP.
+        pysr_params (Optional[Dict[str, Any]]): Parameters for PySRRegressor.
         
     Returns:
         Tuple[List[str], List[float]]: Selected feature names and their importances.
     """
 
-    # Set default GP parameters if none provided
-    if gp_params is None: gp_params = {} 
-    
+    # Set default PySR parameters if none provided
+    if pysr_params is None: pysr_params = {} 
+
+    # Initialize GP with provided parameters
+    gp = GP(
+        loss_function=nrmse_loss,
+        resplit_interval=None,
+        record_interval=None, 
+        pysr_params=pysr_params
+    )
+
     rng = np.random.default_rng(random_state) # Set random seed for reproducibility
-    gp = GP(**gp_params) # Initialize GP with provided parameters
     err_org = np.empty(n_runs) # To hold original errors
     gp_equations = [] # To hold best GP equations
     test_sets = [] # To hold test sets
@@ -45,8 +53,8 @@ def select_features(
         # Split the data into training, validation, and test sets
         train_val_test_set = train_val_test_split(
             X, y, 
-            test_size=test_size, 
-            val_size=val_size, 
+            test_size=sub_test_size,
+            val_size=val_size,
             random_state=rng.integers(0, 2**32)
         )
 
@@ -63,7 +71,7 @@ def select_features(
         test_sets=test_sets,
         err_org=err_org,
         gp_equations=gp_equations,
-        loss_function=gp.loss_function,
+        loss_function=nrmse_loss,
         random_state=random_state
     )
     
