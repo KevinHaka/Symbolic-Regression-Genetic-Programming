@@ -7,6 +7,7 @@ from shap import SamplingExplainer
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..methods.gp import GP
+from ..utils.losses import nrmse_loss
 from ..utils.data_utils import train_val_test_split
 
 def get_shap_values(
@@ -58,35 +59,40 @@ def get_shap_values(
 def select_features(
     X: pd.DataFrame,
     y: np.ndarray,
-    test_size: float = 0.2,
     val_size: float = 0.2,
     n_runs: int = 30,
     n_top_features: Optional[int] = None,
     random_state: Optional[int] = None,
-    gp_params: Optional[Dict[str, Any]] = None
+    pysr_params: Optional[Dict[str, Any]] = None
 ) -> Tuple[List[str], List[float]]:
     """
-    Select top features based on SHAP values from GP models.
+    Select top features based on Shapley values computed from multiple GP runs.
 
     Args:
         X: Input DataFrame.
         y: Target array.
-        test_size: Proportion of data to use as test set.
         val_size: Proportion of data to use as validation set.
         n_runs: Number of GP runs to perform.
         n_top_features: Number of top features to select. If None, defaults to log2(n_features).
         random_state: Random seed for reproducibility.
-        gp_params: Parameters for the GP model.
+        pysr_params: Parameters for the for PySRRegressor.
     
     Returns:
         Tuple containing selected feature names and their SHAP values.
     """
     
     # Set default GP parameters if none provided
-    if gp_params is None: gp_params = {}
+    if pysr_params is None: pysr_params = {}
+
+    # Initialize GP with provided parameters
+    gp = GP(
+        loss_function=nrmse_loss,
+        resplit_interval=None,
+        record_interval=None, 
+        pysr_params=pysr_params
+    )
 
     rng = np.random.default_rng(random_state) # Set random seed for reproducibility
-    gp = GP(**gp_params) # Initialize GP with provided parameters
     X_trains = [] # To hold training data for each run
     gp_equations = [] # To hold best GP equations
 
@@ -101,7 +107,7 @@ def select_features(
         # Split the data into training, validation, and test sets
         train_val_test_set = train_val_test_split(
             X, y, 
-            test_size=test_size, 
+            test_size=0., 
             val_size=val_size, 
             random_state=rng.integers(0, 2**32)
         )
@@ -109,8 +115,8 @@ def select_features(
         # Train a GP model and get the best equations
         temp_best_eqs = gp.run(train_val_test_set)[1]
 
-        # Store training data and best equation from this run
-        X_trains.append(train_val_test_set[0])
+        # Store training + validation data and the best equation for this run
+        X_trains.append(pd.concat([train_val_test_set[0], train_val_test_set[1]], axis=0))
         gp_equations.append(temp_best_eqs[-1])
 
     # Select top features based on SHAP values from the gathered GP equations
