@@ -73,10 +73,14 @@ class GPCMI(BaseMethod):
         # Unpack train/val/test set
         X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_set
 
+        # Combine training and validation sets for feature selection
+        X_train_val = pd.concat([X_train, X_val], axis=0)
+        y_train_val = np.concatenate([y_train, y_val], axis=0)
+
         # Select features using CMI-based selection
         selected_features, _ = cmi_sf(
-            X=X_train, 
-            y=y_train,
+            X=X_train_val, 
+            y=y_train_val,
             n_permutations=self.n_permutations,
             alpha=self.alpha,
             k_nearest_neighbors=self.k_nearest_neighbors,
@@ -97,8 +101,7 @@ class GPCMI(BaseMethod):
         training_losses, validation_losses, test_losses, best_eqs = fit_and_evaluate_best_equation(
             train_val_test_set_filtered,
             self.loss_function,
-            self.record_interval,
-            self.resplit_interval,
+            self.events,
             self.pysr_params
         )
 
