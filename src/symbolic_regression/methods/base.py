@@ -27,26 +27,21 @@ class BaseMethod(ABC):
             pysr_params: parameters for PySRRegressor
         """
 
+        # Get default niterations from PySRRegressor if not provided
+        niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
+
         # Store parameters
         self.loss_function = loss_function
-        self.record_interval = record_interval
-        self.resplit_interval = resplit_interval
+        self.record_interval = record_interval if record_interval else niterations
+        self.resplit_interval = resplit_interval if resplit_interval else niterations
         self.pysr_params = pysr_params
 
-        # Determine number of records based on niterations and record_interval
-        niterations = self.pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
-        self.n_records = niterations // self.record_interval if self.record_interval else 1
-
-        # Ensure niterations is an integer
-        assert isinstance(niterations, int), "niterations must be an integer."
-
-        # Set default record and resplit intervals if not provided
-        record_interval = self.record_interval if self.record_interval else niterations
-        resplit_interval = self.resplit_interval if self.resplit_interval else niterations
+        # Calculate total number of records based on niterations and record_interval
+        self.n_records = niterations // self.record_interval
         
         # Determine record and resplit points
-        self.record_points = list(range(record_interval, niterations + 1, record_interval))
-        self.resplit_points = list(range(resplit_interval, niterations, resplit_interval))
+        self.record_points = list(range(self.record_interval, niterations + 1, self.record_interval))
+        self.resplit_points = list(range(self.resplit_interval, niterations, self.resplit_interval))
 
         # Build event schedule for recording and resplitting
         self.events: Dict[int, set] = {}
