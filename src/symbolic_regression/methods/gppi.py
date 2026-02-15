@@ -12,7 +12,6 @@ from ..feature_selections.gppi import select_features as gppi_sf
 class GPPI(BaseMethod):
     def __init__(
         self,
-        val_size: float = signature(gppi_sf).parameters['val_size'].default,
         sub_test_size: float = signature(gppi_sf).parameters['sub_test_size'].default,
         n_runs: int = signature(gppi_sf).parameters['n_runs'].default,
         loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = signature(GP).parameters['loss_function'].default,
@@ -28,8 +27,6 @@ class GPPI(BaseMethod):
         
         Parameters
         ----------
-        val_size : float
-            Proportion of data to use for validation (only for feature selection).
         sub_test_size : float
             Proportion of data to use for sub-testing (only for feature selection).
         n_runs : int
@@ -49,7 +46,6 @@ class GPPI(BaseMethod):
 
         super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
         self.n_runs = n_runs
-        self.val_size = val_size
         self.sub_test_size = sub_test_size
       
     def run(
@@ -94,7 +90,7 @@ class GPPI(BaseMethod):
         # Compute selected features using GPPI
         selected_features = gppi_sf(
             X_train_val, y_train_val,
-            val_size=self.val_size,
+            val_size=len(y_val) / (len(y_train) + len(y_val) + len(y_test)),
             sub_test_size=self.sub_test_size,
             n_runs=self.n_runs,
             random_state=random_state,
