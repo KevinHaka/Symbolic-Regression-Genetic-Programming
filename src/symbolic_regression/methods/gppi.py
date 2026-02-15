@@ -1,21 +1,19 @@
 import numpy as np
 import pandas as pd
 
-from multiprocessing import Manager
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from inspect import signature
 
 from .gp import GP
 from .base import BaseMethod
 from ..utils.model_utils import fit_and_evaluate_best_equation
 from ..feature_selections.gppi import select_features as gppi_sf
-from ..feature_selections.gppi import select_features_from_pretrained_models as gppi_pretrained_sf
 
 class GPPI(BaseMethod):
     def __init__(
         self,
-        test_size: float = signature(gppi_sf).parameters['test_size'].default,
         val_size: float = signature(gppi_sf).parameters['val_size'].default,
+        sub_test_size: float = signature(gppi_sf).parameters['sub_test_size'].default,
         n_runs: int = signature(gppi_sf).parameters['n_runs'].default,
         loss_function: Callable[[np.ndarray, np.ndarray], np.float64] = signature(GP).parameters['loss_function'].default,
         record_interval: Optional[int] = 1,
@@ -30,10 +28,10 @@ class GPPI(BaseMethod):
         
         Parameters
         ----------
-        test_size : float
-            Proportion of data for testing.
         val_size : float
-            Proportion of data for validation.
+            Proportion of data to use for validation (only for feature selection).
+        sub_test_size : float
+            Proportion of data to use for sub-testing (only for feature selection).
         n_runs : int
             Number of GP runs.
         loss_function : Callable[[np.ndarray, np.ndarray], np.float64]
@@ -50,115 +48,10 @@ class GPPI(BaseMethod):
         if pysr_params is None: pysr_params = {}
 
         super().__init__(loss_function, record_interval, resplit_interval, pysr_params)
-        self._feature_cache = Manager().dict() # Cache for storing selected features
-        self.test_size = test_size
-        self.val_size = val_size
         self.n_runs = n_runs
-
-    @staticmethod
-    def _get_dataset_key(
-        X: pd.DataFrame
-    ) -> Tuple[str, ...]:
-        """ Generate a unique key for the dataset based on its feature names. """
-
-        return tuple(sorted(X.columns))
-    
-    def clear_feature_cache(
-        self
-    ) -> None:
-        """ Clear the feature cache. """
-        self._feature_cache.clear()
-
-    def precompute_features(
-        self, 
-        X: pd.DataFrame, 
-        y: np.ndarray,
-        random_state: Optional[int] = None
-    ) -> List[str]:
-        """
-        Precompute selected features using permutation importance.
-        
-        Args:
-            X (pd.DataFrame): Feature DataFrame.
-            y (np.ndarray): Target variable.
-            random_state (Optional[int]): Random seed for reproducibility.
-        
-        Returns:
-            List[str]: List of selected feature names.
-        """
-
-        # Get a unique key for the dataset to cache features
-        dataset_key = self._get_dataset_key(X)
-
-        # If features not cached, compute and store them
-        if dataset_key not in self._feature_cache:
-            gp_params = {
-                "loss_function": self.loss_function,
-                "record_interval": self.record_interval,
-                "resplit_interval": self.resplit_interval,
-                "pysr_params": self.pysr_params
-            }
-
-            # Compute selected features using SHAP
-            selected_features, _ = gppi_sf(
-                X, y,
-                test_size=self.test_size,
-                val_size=self.val_size,
-                n_runs=self.n_runs,
-                random_state=random_state,
-                gp_params=gp_params
-            )
-
-            # Cache the selected features
-            self._feature_cache[dataset_key] = selected_features
-
-        else:
-            selected_features = self._feature_cache[dataset_key]
-
-        return selected_features
-
-    def precompute_features_from_pretrained_models(
-        self,
-        test_sets: Sequence[Tuple[pd.DataFrame, np.ndarray]],
-        err_org: np.ndarray,
-        gp_equations: Sequence[pd.Series],
-        random_state: Optional[int] = None
-    ) -> List[str]:
-        """
-        Precompute selected features using permutation importance from pretrained GP models.
-
-        Args:
-            test_sets (Sequence[Tuple[pd.DataFrame, np.ndarray]]): Sequence of test sets (X_test, y_test).
-            err_org (np.ndarray): Original errors from the GP models on the train sets.
-            gp_equations (Sequence[pd.Series]): Sequence of GP equations.
-            random_state (Optional[int]): Random seed for reproducibility.
-
-        Returns:
-            List[str]: List of selected feature names.
-        """
-
-        # Get a unique key for the dataset to cache features
-        dataset_key = self._get_dataset_key(test_sets[0][0])
-
-        # If features not cached, compute and store them
-        if dataset_key not in self._feature_cache:
-            # Compute selected features using SHAP from pretrained models
-            selected_features = gppi_pretrained_sf(
-                test_sets=test_sets,
-                err_org=err_org,
-                gp_equations=gp_equations,
-                loss_function=self.loss_function,
-                random_state=random_state
-            )[0]
-
-            # Cache the selected features
-            self._feature_cache[dataset_key] = selected_features
-
-        else:
-            selected_features = self._feature_cache[dataset_key]
-
-        return selected_features
-        
+        self.val_size = val_size
+        self.sub_test_size = sub_test_size
+      
     def run(
         self,
         train_val_test_set: Tuple[
@@ -191,24 +84,22 @@ class GPPI(BaseMethod):
             - list of feature names (List[str]).
         """
 
-        del random_state  # Unused variable
-
         # Unpack the sets
         X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_set
 
-        # Get a unique key for the dataset to cache features
-        dataset_key = self._get_dataset_key(X_train)
+        # Combine training and validation sets for feature selection
+        X_train_val = pd.concat([X_train, X_val], axis=0)
+        y_train_val = np.concatenate([y_train, y_val], axis=0)
 
-        # If features cached, retrieve them
-        if dataset_key in self._feature_cache.keys():
-            selected_features = self._feature_cache[dataset_key]
-
-        else:
-            raise ValueError(
-                "Features have not been precomputed.\n"+
-                "Please run `precompute_features` or\n" +
-                "`precompute_features_from_pretrained_models` before calling `run`."
-            )
+        # Compute selected features using GPPI
+        selected_features = gppi_sf(
+            X_train_val, y_train_val,
+            val_size=self.val_size,
+            sub_test_size=self.sub_test_size,
+            n_runs=self.n_runs,
+            random_state=random_state,
+            pysr_params=self.pysr_params
+        )[0]
 
         # Create a new data split with only the selected features
         train_val_test_set_filtered = (
@@ -220,12 +111,11 @@ class GPPI(BaseMethod):
             y_test
         )
 
-        # Run GP on the filtered dataset
+        # Fit and evaluate the best equation using PySR on the filtered dataset
         training_losses, validation_losses, test_losses, best_eqs = fit_and_evaluate_best_equation(
             train_val_test_set_filtered,
             self.loss_function,
-            self.record_interval,
-            self.resplit_interval,
+            self.events,
             self.pysr_params
         )
 
