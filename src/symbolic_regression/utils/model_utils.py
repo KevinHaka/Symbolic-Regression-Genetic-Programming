@@ -216,7 +216,8 @@ def fit_and_evaluate_best_equation(
         # If recording is scheduled, evaluate and store losses
         if "record" in actions:
             # Concatenate the training and test sets
-            X_check = pd.concat([X_train, X_test], ignore_index=True)
+            if X_test.empty: X_check = X_train
+            else: X_check = pd.concat([X_train, X_test], ignore_index=True)
 
             # Select the best equation based on validation loss
             best_eq = best_equation(model, X_val, y_val, loss_function, X_check)
