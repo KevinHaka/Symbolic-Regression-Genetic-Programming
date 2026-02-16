@@ -131,7 +131,8 @@ def fit_and_evaluate_best_equation(
         np.ndarray    # y_test
     ],
     loss_function: Callable,
-    events: Dict[int, set],
+    record_interval: Optional[int],
+    resplit_interval: Optional[int],
     pysr_params: Optional[Dict[str, Any]] = None
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[pd.Series]]:
     """
@@ -144,8 +145,12 @@ def fit_and_evaluate_best_equation(
         Tuple containing (X_train, X_val, X_test, y_train, y_val, y_test).
     loss_function : Callable
         Function to compute the loss between true and predicted values.
-    events : dict
-        Dictionary mapping iteration numbers to sets of actions (e.g., "record", "resplit").
+    record_interval : Optional[int]
+        Number of iterations between recoridings. 
+    resplit_interval : Optional[int]
+        Number of iterations between each re-splitting of the training and 
+        validation sets. The data is re-shuffled and split every 
+        `resplit_interval` iterations to reduce overfitting.
     pysr_params : dict, optional
         Parameters to pass to PySRRegressor (default: None).
 
@@ -164,8 +169,17 @@ def fit_and_evaluate_best_equation(
     # Set default parameters if not provided
     if pysr_params is None: pysr_params = {}
 
-    # Count how many times we will record losses based on the events dictionary
-    n_records = sum(1 for actions in events.values() if "record" in actions) 
+    # Get default niterations from PySRRegressor if not provided
+    niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
+
+    assert isinstance(niterations, int) and niterations > 0, "niterations must be a positive integer."
+
+    # Set record and resplit intervals, defaulting to niterations if not provided
+    record_interval = record_interval if record_interval else niterations
+    resplit_interval = resplit_interval if resplit_interval else niterations
+
+    # Calculate total number of records based on niterations and record_interval
+    n_records = niterations // record_interval
 
     # Handle the case where no features are selected (empty DataFrame)
     if train_val_test_set[0].empty:
@@ -187,6 +201,15 @@ def fit_and_evaluate_best_equation(
     # Random state for reproducibility
     random_state = pysr_params.get("random_state", None)
     rng = np.random.default_rng(random_state)
+
+    # Determine record and resplit points
+    record_points = list(range(record_interval, niterations + 1, record_interval))
+    resplit_points = list(range(resplit_interval, niterations, resplit_interval))
+
+    # Build event schedule for recording and resplitting
+    events: Dict[int, set] = {}
+    for it in record_points: events.setdefault(it, set()).add("record")
+    for it in resplit_points: events.setdefault(it, set()).add("resplit")
 
     # Initialize arrays to store losses at each interval
     training_losses = np.empty(n_records, dtype=float)
