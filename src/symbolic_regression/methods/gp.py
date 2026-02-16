@@ -78,7 +78,8 @@ class GP(BaseMethod):
         training_losses, validation_losses, test_losses, best_eqs = fit_and_evaluate_best_equation(
             train_val_test_set,
             self.loss_function,
-            self.events,
+            self.record_interval,
+            self.resplit_interval,
             self.pysr_params
         )
 

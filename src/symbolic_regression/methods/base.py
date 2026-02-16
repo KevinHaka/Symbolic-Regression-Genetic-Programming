@@ -27,26 +27,11 @@ class BaseMethod(ABC):
             pysr_params: parameters for PySRRegressor
         """
 
-        # Get default niterations from PySRRegressor if not provided
-        niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
-
         # Store parameters
         self.loss_function = loss_function
-        self.record_interval = record_interval if record_interval else niterations
-        self.resplit_interval = resplit_interval if resplit_interval else niterations
+        self.record_interval = record_interval
+        self.resplit_interval = resplit_interval
         self.pysr_params = pysr_params
-
-        # Calculate total number of records based on niterations and record_interval
-        self.n_records = niterations // self.record_interval
-        
-        # Determine record and resplit points
-        self.record_points = list(range(self.record_interval, niterations + 1, self.record_interval))
-        self.resplit_points = list(range(self.resplit_interval, niterations, self.resplit_interval))
-
-        # Build event schedule for recording and resplitting
-        self.events: Dict[int, set] = {}
-        for it in self.record_points: self.events.setdefault(it, set()).add("record")
-        for it in self.resplit_points: self.events.setdefault(it, set()).add("resplit")
 
     @abstractmethod
     def run(

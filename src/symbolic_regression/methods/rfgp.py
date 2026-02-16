@@ -5,6 +5,8 @@ import copy
 from typing import Any, Callable, Dict, Optional, Tuple, List, Type
 from inspect import signature
 
+from pysr import PySRRegressor
+
 from .base import BaseMethod
 from .gpcmi import GPCMI
 
@@ -81,14 +83,6 @@ class RFGP(BaseMethod):
         self.method_class = method_class
         self.method_params = copy.deepcopy(method_params)
 
-        # Distribute records among submodels, including remainders
-        base_records_per_submodel = self.n_records // self.n_submodels
-        remainder = self.n_records % self.n_submodels
-        self.records_per_submodel = [
-            base_records_per_submodel + 1 if (i < remainder) else base_records_per_submodel
-            for i in range(self.n_submodels)
-        ]
-
     def run(
         self,
         train_val_test_set: Tuple[
@@ -129,10 +123,25 @@ class RFGP(BaseMethod):
         y_val_residual = y_val_orig.copy()
         y_test_residual = y_test_orig.copy()
 
+        # Get niterations from pysr_params or default from PySRRegressor
+        niterations = self.pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
+
+        # Determine record interval, defaulting to niterations if not provided
+        record_interval = self.record_interval if self.record_interval else niterations
+        n_records = niterations // record_interval 
+
+        # Distribute records among submodels, including remainders
+        base_records_per_submodel = n_records // self.n_submodels
+        remainder = n_records % self.n_submodels
+        self.records_per_submodel = [
+            base_records_per_submodel + 1 if (i < remainder) else base_records_per_submodel
+            for i in range(self.n_submodels)
+        ]
+
         # Initialize results
-        training_losses = np.zeros(self.n_records)
-        validation_losses = np.zeros(self.n_records)
-        test_losses = np.zeros(self.n_records)
+        training_losses = np.zeros(n_records)
+        validation_losses = np.zeros(n_records)
+        test_losses = np.zeros(n_records)
         
         # To hold results from all submodels
         all_best_eqs = []
@@ -151,7 +160,6 @@ class RFGP(BaseMethod):
 
             # Number of records to fit for this submodel
             n_records_for_this_submodel = self.records_per_submodel[sub_i]
-            if n_records_for_this_submodel == 0: continue
 
             # Update the number of iterations for the submodel
             method.pysr_params['niterations'] = n_records_for_this_submodel * self.record_interval
