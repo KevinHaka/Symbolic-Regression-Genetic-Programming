@@ -5,14 +5,14 @@ load_dotenv(find_dotenv())
 
 import os
 import datetime
-import sympy as sp
 
-from copy import deepcopy  
+from inspect import signature
 from functools import partial
-from numpy import arange, array
+from numpy import arange
 from numpy.random import default_rng
 from joblib import delayed
 from tqdm_joblib import ParallelPbar
+from pysr import PySRRegressor
 
 from symbolic_regression.methods.gp import GP
 from symbolic_regression.methods.gppi import GPPI
@@ -56,17 +56,23 @@ def main() -> None:
     # For GPSHAP
     n_top_features = None
 
+    # For GPPI
+    sub_test_size = 0.3
+
+    # For GPSHAP and GPCMI
+    fs_runs = 30
+
     # For GPCMI
     n_permutations = 100
     alpha = 0.01
-    k_nearest_neighbors = 5
+    k_nearest_neighbors = 3
 
     # For RFGP
     n_submodels = 2
 
     # General
-    n_runs = 2
-    test_size = 0.2
+    n_runs = 10
+    test_size = 0.3
     val_size = 0.2
     record_interval = 10
     resplit_interval = 10
@@ -79,10 +85,10 @@ def main() -> None:
     # Choose datasets to run
     dataset_names = [
         "F1",
-        "F2",
+        # "F2",
         "Friedman1",
-        "Friedman2",
-        "Friedman3",
+        # "Friedman2",
+        # "Friedman3",
         # "542_pollution",
         # ("4544_GeographicalOriginalofMusic", "4544_GOM"),
         # "505_tecator",
@@ -94,17 +100,11 @@ def main() -> None:
 
     # PySR parameters
     pysr_params = {
-        "populations": 3,
-        "population_size": 30,
+        "populations": 12,
+        "population_size": 20,
         "niterations": 50,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv", "sin", "atan"],
-        "extra_sympy_mappings": {
-            # "inv": lambda x: sp.Pow(x, -1),
-            # "sqrt": lambda x: sp.sqrt(x),
-            # "sin": lambda x: sp.sin(x),
-            # "atan": lambda x: sp.atan(x),
-        },
 
         "parallelism": "serial",
         "deterministic": False if random_state is None else True,
@@ -125,16 +125,16 @@ def main() -> None:
 
     # GPPI method parameters
     gppi_params = {
-        "test_size": test_size,
-        "val_size": val_size,
-        "n_runs": n_runs,
+        "sub_test_size": sub_test_size,
+        "n_runs": fs_runs,
         **gp_params,
     }
 
     # GPSHAP method parameters
     gpshap_params = {
         "n_top_features": n_top_features,
-        **gppi_params
+        "n_runs": fs_runs,
+        **gp_params
     }
 
     # GPCMI method parameters
@@ -152,19 +152,17 @@ def main() -> None:
         "method_params": gpcmi_params
     }
 
-    independent_methods = {
+    # Define the methods to run
+    methods = {
         "GP": GP(**gp_params),
+        "GPPI": GPPI(**gppi_params),
+        "GPSHAP": GPSHAP(**gpshap_params),
         "GPCMI": GPCMI(**gpcmi_params),
         "RFGPCMI": RFGP(**rfgpcmi_params),
     }
-    dependent_methods = {
-        "GPPI": GPPI(**gppi_params),
-        "GPSHAP": GPSHAP(**gpshap_params),
-    }
-    all_methods = {**independent_methods, **dependent_methods}
 
-    # Get number of iterations from one of the methods
-    niterations = all_methods[next(iter(all_methods))].pysr_params["niterations"]
+    # Get default niterations from PySRRegressor if not provided
+    niterations = pysr_params.get("niterations", signature(PySRRegressor).parameters['niterations'].default)
 
     # Define epochs based on record interval
     epochs = arange(record_interval, niterations+1, record_interval)
@@ -190,13 +188,8 @@ def main() -> None:
         split_size = sum([get_numpy_pandas_size(obj) for obj in splits[dataset_name][0]])
         exclude_split[dataset_name] = split_size > 1024 ** 2
 
-        # Iterate over independent methods
-        for method_name, method in independent_methods.items():
-            # Determine if results should be returned for this method
-            return_results = True if (method_name == "GP") and (
-                ("GPPI" in dependent_methods) or ("GPSHAP" in dependent_methods)
-            ) else False
-
+        # Iterate over methods
+        for method_name, method in methods.items():
             # Create a delayed task for each run
             delayed_tasks.extend(
                 delayed(persist)(
@@ -213,107 +206,13 @@ def main() -> None:
                     train_val_test_set=split, 
                     method=method, 
                     output_dir=run_output_dir, 
-                    return_results=return_results,
+                    return_results=False,
                     random_state=rng.integers(0, 2**32)
                 ) for run, split in enumerate(splits[dataset_name])
             )
 
-    # Execute all independent method tasks in parallel
-    method_results = ParallelPbar("Processing independent methods")(n_jobs=n_jobs)(delayed_tasks)
-    method_results = [result for result in method_results if result] # Filter out None results
-
-    # Special handling for GPPI and GPSHAP, which require precomputed features
-    if dependent_methods:
-        preparing_tasks = [] # To hold GPPI and GPSHAP preparing tasks
-        delayed_tasks = [] # To hold all delayed tasks
-
-        # Iterate over datasets
-        for dataset_name, dataset in datasets.items():
-            # Check if GP results are available for this dataset
-            if 'GP' in independent_methods: 
-                # Extract GP results for this dataset
-                gp_results = [
-                    result for result in method_results if (
-                        (result['method_name'] == 'GP') and 
-                        (result['dataset_name'] == dataset_name)
-                    )
-                ]
-                gp_equations = [gp_result['equations'][-1] for gp_result in gp_results]
-
-                if "GPPI" in dependent_methods:
-                    test_sets = [(split[2], split[5]) for split in splits[dataset_name]] # Test sets from splits
-                    err_org = array([result['losses']["test_losses"][-1] for result in gp_results]) # Original test errors from GP runs
-
-                    # Create a task for precomputing features from pretrained GP models
-                    preparing_tasks.append(
-                        delayed(warnings_manager)(
-                            dependent_methods["GPPI"].precompute_features_from_pretrained_models,
-                            warning_filters,
-                            test_sets, err_org, gp_equations, rng.integers(0, 2**32)
-                        )
-                    )
-
-                if "GPSHAP" in dependent_methods:
-                    X_trains = [split[0] for split in splits[dataset_name]] # X_train splits
-
-                    # Create a task for precomputing features from pretrained GP models
-                    preparing_tasks.append(
-                        delayed(warnings_manager)(
-                            dependent_methods["GPSHAP"].precompute_features_from_pretrained_models,
-                            warning_filters,
-                            X_trains, gp_equations, n_top_features, rng.integers(0, 2**32)
-                        )
-                    )
-
-            else: 
-                X = dataset["X"] # Features
-                y = dataset["y"] # Target
-
-                # Create precomputing tasks for dependent methods
-                for method in dependent_methods.values():
-                    preparing_tasks.append(
-                        delayed(warnings_manager)(
-                            method.precompute_features,
-                            warning_filters,
-                            X, y, rng.integers(0, 2**32)
-                        )
-                    )
-
-        # Execute precomputing tasks in parallel
-        ParallelPbar("Precomputing features for dependent methods")(n_jobs=n_jobs)(preparing_tasks)
-
-        # Create picklable copies of dependent methods
-        picklable_methods = {}
-        for method_name, method in dependent_methods.items():
-            picklable_methods[method_name] = deepcopy(method)
-            picklable_methods[method_name]._feature_cache = dict(picklable_methods[method_name]._feature_cache)
-
-        # Iterate over datasets to create dependent method tasks
-        for dataset_name, dataset in datasets.items():
-            for method_name, method in dependent_methods.items():
-                delayed_tasks.extend([
-                    delayed(persist)(
-                        func=partial(warnings_manager, func=process_task),
-                        pickle_dir=os.path.join(run_params_dir, dataset_name, method_name),
-                        filename=f"run_{run}.pkl",
-                        execute=True,
-                        save_result=False,
-                        exclude_keys=['method', "train_val_test_set" if exclude_split[dataset_name] else None],
-                        extra_data={'method': picklable_methods[method_name]},
-                        filters=warning_filters,
-                        dataset_name=dataset_name, 
-                        method_name=method_name, 
-                        run=run, 
-                        train_val_test_set=split, 
-                        method=method,
-                        output_dir=run_output_dir,
-                        return_results=False,
-                        random_state=rng.integers(0, 2**32)
-                    ) for run, split in enumerate(splits[dataset_name])
-                ])
-
-        # Execute all dependent method tasks in parallel
-        ParallelPbar("Processing dependent method tasks")(n_jobs=n_jobs)(delayed_tasks)
+    # Execute all method tasks in parallel
+    ParallelPbar("Processing methods")(n_jobs=n_jobs)(delayed_tasks)
 
     # Load all task results from the run output directory
     task_results = load_pickle_files(run_output_dir)
