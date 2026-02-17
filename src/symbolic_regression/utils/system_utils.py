@@ -37,25 +37,25 @@ def timeit(
     dict
         Single run:
             {
-                'time': float,
+                'time': np.float64,
                 'results': Any
             }
 
         Multiple runs:
             {
-                'average_time': float,
-                'std_time': float,
-                'all_times': list[float],
+                'average_time': np.float64,
+                'std_time': np.float64,
+                'all_times': np.ndarray,
             }
     """
 
-    times: list[float] = []
+    times: np.ndarray = np.empty(n_runs, dtype=np.float64)
 
     # Execute n_runs times
-    for _ in range(n_runs):
+    for i in range(n_runs):
         start = time.perf_counter()
         results = func(*args, **kwargs)
-        times.append(time.perf_counter() - start)
+        times[i] = time.perf_counter() - start
 
     if n_runs == 1:
         return {
@@ -64,8 +64,8 @@ def timeit(
         }
 
     return {
-        'average_time': np.mean(times),
-        'std_time': np.std(times),
+        'average_time': times.mean(),
+        'std_time': times.std(),
         'all_times': times
     }
 
