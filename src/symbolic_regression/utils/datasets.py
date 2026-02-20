@@ -17,23 +17,23 @@ def list_available_datasets() -> List[str]:
 
 # Custom dataset loading functions
 def load_datasets(
-    dataset_names: Sequence[Union[str, Tuple[str, str]]]
+    dataset_names: Sequence[Union[str, Tuple[str, str], Tuple[str, Dict], Tuple[str, str, Dict]]]
 ) -> Dict[str, Dict[str, Union[pd.DataFrame, np.ndarray]]]:
     """
-    Load multiple datasets by name with optional renaming.
-
-    Each element in `dataset_names` can be:
-      - a string: the dataset's registered name (used as the key)
-      - a (name, alias) tuple: original name plus a custom dictionary key
+    Load multiple datasets by name with optional renaming and parameters.
 
     Parameters
     ----------
-    dataset_names : sequence of (str | (str, str))
-        Names or (name, alias) tuples referring to registered loaders.
+    datasets : sequence of (str | (str, str) | (str, dict) | (str, str, dict))
+        Each element can be:
+            - a string: the dataset's registered name (used as the key)
+            - a (name, alias) tuple: original name plus a custom dictionary key
+            - a (name, params) tuple: name and a dict of parameters to pass to the loader
+            - a (name, alias, params) tuple: name, alias, and a dict of parameters
 
     Returns
     -------
-    datasets : dict
+    dataset_names : dict
         Dictionary with keys as dataset names (or renames) 
         and values as dicts {'X': features, 'y': target}.
     """
@@ -44,16 +44,33 @@ def load_datasets(
 
     # Process each requested dataset
     for item in dataset_names:
-        # Support both string names and (name, rename) tuples
+        # Support multiple formats
+
+        # Case 1: Simple string
         if isinstance(item, str):
-            name, rename = item, item
+            name, rename, params = item, item, {}
+
+        # Case 2: Two elements
+        elif len(item) == 2:
+            
+            # (name, params)
+            if isinstance(item[1], dict):
+                name, params = item
+                rename = name
+
+            # (name, alias)
+            else:
+                name, rename = item
+                params = {}
+
+        # Case 3: Three elements
         else:
-            name, rename = item
+            name, rename, params = item
 
         # Check if the dataset is available
         if name in available_datasets:
-            # Load the dataset using its registered function
-            X, y = _DATASET_REGISTRY[name]()
+            # Load the dataset using its registered function with parameters
+            X, y = _DATASET_REGISTRY[name](**params) # type: ignore
             datasets[rename] = {'X': X, 'y': y}
 
         else:
@@ -72,13 +89,13 @@ def load_datasets(
     return datasets
 
 # Functions to load specific datasets from PMLB
-def _4544_geographical_original_of_music(
+def _4544_GeographicalOriginalofMusic(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
     This dataset contains 117 audio/music features extracted from 1059 traditional
     music tracks originating from 33 countries/regions.
     The target variable is the geographic latitude (a continuous value in degrees)
-    of the track's origin, making this a regression problem.
+    of the track's origin.
 
     Returns
     -------
@@ -101,16 +118,15 @@ def _4544_geographical_original_of_music(
 def _505_tecator(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
-    This dataset contains near-infrared spectroscopy data for 240 meat samples.
+    This dataset contains near-infrared spectroscopy data for 220 meat samples.
     It includes 124 features: 100 raw absorbance measurements (wavelengths 850-1050 nm)
     and 24 additional derived features.
-    The target variable is the percent fat content (% by weight) in each sample,
-    making this a regression problem commonly used in chemometrics and symbolic regression.
+    The target variable is the percent fat content (% by weight) in each sample.
 
     Returns
     -------
     X : pandas.DataFrame
-        Feature matrix of shape (240, 124) containing all available spectroscopic features.
+        Feature matrix of shape (220, 124) containing all available spectroscopic features.
     y : np.ndarray
         Target values representing the fat content (%) of the meat samples.
     """
@@ -118,7 +134,34 @@ def _505_tecator(
     # Fetch the dataset from PMLB
     dataset = fetch_data("505_tecator")
     assert isinstance(dataset, pd.DataFrame), "Expected pandas DataFrame"
+
+    # Remove duplicate rows if any (though unlikely in this dataset)
+    dataset.drop_duplicates(inplace=True, ignore_index=True)
     
+    # Separate features and target
+    X = dataset.drop(columns="target")
+    y = dataset['target'].to_numpy()
+    
+    return X, y
+
+def _197_cpu_act(
+) -> Tuple[pd.DataFrame, np.ndarray]:
+    """
+    This dataset contains computer systems activity measures collected from a Sun SPARCstation.
+    The target variable is the portion of time that CPUs run in user mode.
+
+    Returns
+    -------
+    X : pandas.DataFrame
+        Feature matrix of shape (8192, 21) containing system activity metrics.
+    y : np.ndarray
+        Target values representing the CPU user mode time.
+    """
+    
+    # Fetch the dataset from PMLB
+    dataset = fetch_data("197_cpu_act")
+    assert isinstance(dataset, pd.DataFrame), "Expected pandas DataFrame"
+
     # Separate features and target
     X = dataset.drop(columns="target")
     y = dataset['target'].to_numpy()
@@ -128,22 +171,21 @@ def _505_tecator(
 def _542_pollution(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
-    This dataset contains 15 environmental features related to air pollution monitoring.
-    It consists of 60 samples collected from real-world measurements.
-    The target variable is a continuous index representing overall pollution level.
+    This dataset contains climate, demographic, and socioeconomic features for 60 different areas.
+    The target variable is the age-adjusted mortality rate for each area.
 
     Returns
     -------
     X : pandas.DataFrame
-        Feature matrix of shape (60, 15) containing environmental measurement features.
+        Feature matrix of shape (60, 15) containing environmental and demographic metrics.
     y : np.ndarray
-        Target values representing the pollution index of each sample.
+        Target values representing the age-adjusted mortality rate.
     """
     
     # Fetch the dataset from PMLB
     dataset = fetch_data("542_pollution")
     assert isinstance(dataset, pd.DataFrame), "Expected pandas DataFrame"
-    
+
     # Separate features and target
     X = dataset.drop(columns="target")
     y = dataset['target'].to_numpy()
@@ -191,8 +233,7 @@ def _communities_and_crime(
     dataset.data.original.replace("?", np.nan, inplace=True)
     
     # Drop rows with any missing values
-    dataset.data.original.dropna(inplace=True)
-    dataset.data.original.reset_index(drop=True, inplace=True)
+    dataset.data.original.dropna(inplace=True, ignore_index=True)
 
     # Separate features and target
     X = dataset.data.original.drop(columns="ViolentCrimesPerPop")
@@ -249,8 +290,7 @@ def _communities_and_crime_unnormalized(
     dataset.data.original = dataset.data.original.drop(removing_features, axis=1)
 
     # Clean missing values
-    dataset.data.original.dropna(inplace=True)
-    dataset.data.original.reset_index(drop=True, inplace=True)
+    dataset.data.original.dropna(inplace=True, ignore_index=True)
     
     # Fix column names: replace '-' with '_' for valid Python identifiers
     dataset.data.original.columns = dataset.data.original.columns.str.replace('-', '_')
@@ -265,7 +305,7 @@ def _superconductivity(
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
     This dataset contains 81 numeric features derived from the chemical composition
-    of 21263 superconductor materials, with the goal of predicting the critical
+    of 21197 superconductor materials, with the goal of predicting the critical
     temperature (in Kelvin) at which the material becomes superconducting.
 
     The features include statistical aggregations (mean, entropy, range, etc.)
@@ -278,7 +318,7 @@ def _superconductivity(
     Returns
     -------
     X : pandas.DataFrame
-        Feature matrix of shape (21263, 81).
+        Feature matrix of shape (21197, 81).
     y : np.ndarray
         Target values representing critical temperature (in Kelvin).
     """
@@ -288,6 +328,9 @@ def _superconductivity(
 
     # Validate dataset structure
     assert dataset.data is not None, "Dataset loading failed, data is None"
+
+    # Remove duplicate rows if any (though unlikely in this dataset)
+    dataset.data.original.drop_duplicates(inplace=True, ignore_index=True)
 
     # Extract features and target
     X = dataset.data.features
@@ -333,16 +376,16 @@ def _generate_F1_dataset(
     rng = np.random.default_rng(random_state)
     
     # Generate true input features
-    X1 = rng.uniform(0, 1, n_samples)  # Mass 1
-    X2 = rng.uniform(0, 1, n_samples)  # Mass 2
-    X3 = rng.uniform(1, 2, n_samples)  # Distance (> 0 to avoid division by zero)
+    X1 = rng.uniform(0, np.nextafter(1, np.inf), n_samples)  # Mass 1
+    X2 = rng.uniform(0, np.nextafter(1, np.inf), n_samples)  # Mass 2
+    X3 = rng.uniform(1, np.nextafter(2, np.inf), n_samples)  # Distance (> 0 to avoid division by zero)
 
     # Compute target using Newton's law of gravitation
     g = 6.67408e-11  # Gravitational constant
     y = -g * (X1 * X2) / (X3**2)
 
     # Generate noise features (irrelevant for prediction)
-    noise_features = rng.uniform(0, 1, (n_samples, n_noise_features))
+    noise_features = rng.uniform(0, np.nextafter(1, np.inf), size=(n_samples, n_noise_features))
 
     # Create column names
     variable_names = ['X1', 'X2', 'X3'] + [f'noise_{i+1}' for i in range(n_noise_features)]
@@ -383,19 +426,19 @@ def _generate_F2_dataset(
     rng = np.random.default_rng(random_state)
     
     # Generate true input features with specified ranges
-    X1 = rng.uniform(-1, 1, n_samples)  # Symmetric around zero
-    X3 = rng.uniform(-1, 1, n_samples)  # Symmetric around zero
-    X2 = rng.uniform(1, 2, n_samples)   # Positive values for stable denominator
+    X1 = rng.uniform(np.nextafter(-1, np.inf), 1, n_samples)  # Symmetric around zero
+    X3 = rng.uniform(np.nextafter(-1, np.inf), 1, n_samples)  # Symmetric around zero
+    X2 = rng.uniform(np.nextafter(1, np.inf), 2, n_samples)   # Positive values for stable denominator
     
     # Compute target using the F2 rational function
     y = 30 * X1 * X3 / ((X1 - 10) * (X2 ** 2))
     
     # Generate noise features (irrelevant for prediction)
-    noise_features = rng.uniform(0, 1, size=(n_samples, n_noise_features))
+    noise_features = rng.uniform(0, np.nextafter(1, np.inf), size=(n_samples, n_noise_features))
 
     # Create column names
     variable_names = ['X1', 'X2', 'X3'] + [f'noise_{i+1}' for i in range(n_noise_features)]
-    variable_names[-1] += '_F1'  # Unique name for last noise feature
+    variable_names[-1] += '_F2'  # Unique name for last noise feature
 
     # Combine informative and noise features
     variable_values = np.column_stack((X1, X2, X3, noise_features))
@@ -577,8 +620,9 @@ _DATASET_REGISTRY: Dict[str, Callable] = {
     "Friedman3": _generate_friedman3_dataset,
 
     # PMLB
-    "4544_GeographicalOriginalofMusic": _4544_geographical_original_of_music,
+    "4544_GeographicalOriginalofMusic": _4544_GeographicalOriginalofMusic,
     "505_tecator": _505_tecator,
+    "197_cpu_act": _197_cpu_act,
     "542_pollution": _542_pollution,
 
     # UCI
