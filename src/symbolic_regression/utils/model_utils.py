@@ -6,7 +6,7 @@ import pandas as pd
 import sympy as sp
 
 from inspect import signature
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from pysr import PySRRegressor
 from pysr.export_numpy import CallableEquation
@@ -361,7 +361,7 @@ def _create_mean_baseline(
     y_val: np.ndarray,
     y_test: np.ndarray,
     loss_function: Callable[[np.ndarray, np.ndarray], np.float64],
-    complexity_of_constants: int,
+    complexity_of_constants: Optional[Union[int, float]],
     n_records: int,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[pd.Series]]:
     """
@@ -381,7 +381,7 @@ def _create_mean_baseline(
         Test target values.
     loss_function : Callable
         Function to compute the loss between true and predicted values.
-    complexity_of_constants : int
+    complexity_of_constants : int or float or None
         Complexity value assigned to constant.
     n_records : int
         Number of recording intervals for which to replicate losses.
@@ -411,7 +411,7 @@ def _create_mean_baseline(
     
     # Create baseline equation metadata
     best_eqs = [pd.Series({
-        "complexity": complexity_of_constants,
+        "complexity": 1 if complexity_of_constants is None else complexity_of_constants,
         "loss": loss_function(y_train, y_train_pred),
         "equation": str(mean_value),
         "sympy_format": sp.Float(mean_value),
