@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from joblib import Parallel, delayed
 from typing import Any, Callable, Dict, Optional
 
 def permutation_test(
@@ -22,7 +23,7 @@ def permutation_test(
     Parameters
     ----------
     test_statistic : Callable
-        Function computing the test statistic given the data.
+        Function computing the test statistic given the data and a random state for reproducibility.
     data : np.ndarray
         Sample used to build the null distribution.
     observed_statistic : float, optional
@@ -53,13 +54,16 @@ def permutation_test(
     rng = np.random.default_rng(random_state)
 
     # Calculate the observed statistic if not provided
-    if observed_statistic is None: observed_statistic = test_statistic(data)
+    if observed_statistic is None: observed_statistic = test_statistic(data, random_state=int(rng.integers(0, 2**32)))
     assert isinstance(observed_statistic, float), "The observed statistic must be a numeric value."
 
     # Generate the null distribution and sort it
-    null_distribution = np.array([
-        test_statistic(rng.permutation(data)) for _ in range(n_permutations)
-    ])
+    null_distribution = np.array(
+        Parallel(n_jobs=-1)(
+            delayed(test_statistic)(rng.permutation(data), int(rng.integers(0, 2**32))) 
+            for _ in range(n_permutations)
+        )
+    )
     null_distribution.sort()
 
     # Calculate p-value and confidence intervals based on the alternative hypothesis
