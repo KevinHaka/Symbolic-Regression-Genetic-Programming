@@ -72,7 +72,7 @@ def select_features(
         err_org=err_org,
         gp_equations=gp_equations,
         loss_function=nrmse_loss,
-        random_state=random_state
+        random_state=int(rng.integers(0, 2**32))
     )
     
     return selected_features, scaled_importances
