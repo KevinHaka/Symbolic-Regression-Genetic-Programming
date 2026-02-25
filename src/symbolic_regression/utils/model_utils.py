@@ -271,11 +271,12 @@ def fit_and_evaluate_best_equation(
     return training_losses, validation_losses, test_losses, best_eqs
 
 def process_task(
+    method_class: Callable[..., BaseMethod],
+    method_params: Dict[str, Any],
     dataset_name: str, 
     method_name: str, 
     run: int, 
     train_val_test_set: Tuple, 
-    method: BaseMethod, 
     output_dir: str,
     return_results: bool = False,
     random_state: Optional[int] = None,
@@ -289,6 +290,10 @@ def process_task(
 
     Parameters
     ----------
+    method_class : BaseMethod
+        The class of the symbolic regression method to be instantiated.
+    method_params : Dict[str, Any]
+        Parameters to be passed to the method class constructor.
     dataset_name : str
         The name of the dataset being processed.
     method_name : str
@@ -298,9 +303,6 @@ def process_task(
     train_val_test_set : Tuple
         A tuple containing the training, validation, and test data splits.
         Expected format: (X_train, X_val, X_test, y_train, y_val, y_test).
-    method : BaseMethod
-        An instance of a class that inherits from `BaseMethod` and implements
-        the `run` method.
     output_dir : str
         The directory where the output files will be saved.
     return_results : bool
@@ -323,6 +325,9 @@ def process_task(
 
     # Set random state for reproducibility
     rng = np.random.default_rng(random_state)
+
+    # Instantiate the method class with the provided parameters
+    method = method_class(**method_params)
 
     # Set the random state in the method's PySR parameters
     pysr_rs = rng.integers(0, 2**32) if method.pysr_params.get("deterministic") else None
