@@ -10,7 +10,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..methods.gp import GP
 from ..utils.losses import nrmse_loss
 from ..utils.data_utils import train_val_test_split
-from ..utils.system_utils import temporary_seed
+from ..utils.system_utils import temporary_seed, warnings_manager
+
+# # Suppress specific warnings
+warning_filters = [
+    {"action": "ignore", "message": r".*invalid value encountered.*", "category": RuntimeWarning},
+    {"action": "ignore", "message": r".*overflow encountered.*", "category": RuntimeWarning},
+    {"action": "ignore", "message": r".*divide by zero.*", "category": RuntimeWarning},
+]
 
 def get_shap_values(
     X_train: pd.DataFrame,
@@ -52,7 +59,20 @@ def get_shap_values(
         with temporary_seed(int(rng.integers(0, 2**32))):
             # Compute SHAP values for each feature in the equation
             shap_values = explainer.shap_values(X_train[str_variables], silent=True)
-            feature_shap_values = np.mean(np.abs(shap_values), axis=0)
+
+            # Take absolute values of SHAP values and convert inf values to NaN
+            abs_shap = np.abs(shap_values)
+            abs_shap = np.where(np.isinf(abs_shap), np.nan, abs_shap)
+
+            # Compute mean absolute SHAP value for each feature, ignoring NaN values and suppressing warnings
+            feature_shap_values = warnings_manager(
+                np.nanmean, 
+                [{"action": "ignore", "message": r".*Mean of empty slice.*", "category": RuntimeWarning}], 
+                abs_shap, axis=0
+            )
+
+            # Replace any remaining NaN values with 0
+            feature_shap_values = np.nan_to_num(feature_shap_values, nan=0.0)
 
     else:
         str_variables = []
@@ -163,7 +183,10 @@ def select_features_from_pretrained_models(
 
     # Compute SHAP values for each GP equation in parallel
     shap_results = Parallel(n_jobs=-1)(
-        delayed(get_shap_values)(X_train, gp_equation,  int(rng.integers(0, 2**32)))
+        delayed(warnings_manager)(
+            get_shap_values, warning_filters, 
+            X_train, gp_equation, int(rng.integers(0, 2**32))
+        )
         for X_train, gp_equation in zip(X_trains, gp_equations)
     )
 
