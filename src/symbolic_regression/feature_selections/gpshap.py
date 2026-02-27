@@ -3,12 +3,14 @@ import pandas as pd
 
 from sympy import lambdify
 from shap import SamplingExplainer
+from joblib import Parallel, delayed
 
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..methods.gp import GP
 from ..utils.losses import nrmse_loss
 from ..utils.data_utils import train_val_test_split
+from ..utils.system_utils import temporary_seed
 
 def get_shap_values(
     X_train: pd.DataFrame,
@@ -46,9 +48,11 @@ def get_shap_values(
             seed=int(rng.integers(0, 2**32))
         )
 
-        # Compute SHAP values for each feature in the equation
-        shap_values = explainer.shap_values(X_train[str_variables], silent=True)
-        feature_shap_values = np.mean(np.abs(shap_values), axis=0)
+        # Use temporary_seed context manager to ensure reproducibility of SHAP values
+        with temporary_seed(int(rng.integers(0, 2**32))):
+            # Compute SHAP values for each feature in the equation
+            shap_values = explainer.shap_values(X_train[str_variables], silent=True)
+            feature_shap_values = np.mean(np.abs(shap_values), axis=0)
 
     else:
         str_variables = []
@@ -157,15 +161,17 @@ def select_features_from_pretrained_models(
         n_features = len(feature_names)
         n_top_features = max(1, round(np.log2(n_features)))
 
-    # Compute SHAP values for each GP equation and aggregate
-    for gp_equation, X_train in zip(gp_equations, X_trains):
+    # Compute SHAP values for each GP equation in parallel
+    shap_results = Parallel(n_jobs=-1)(
+        delayed(get_shap_values)(X_train, gp_equation,  int(rng.integers(0, 2**32)))
+        for X_train, gp_equation in zip(X_trains, gp_equations)
+    )
 
-        # Get SHAP values for the current equation
-        str_variables, feature_shap_values = get_shap_values(X_train, gp_equation, rng.integers(0, 2**32))
-
-        # Aggregate SHAP values across equations
+    # Aggregate SHAP values across all equations by summing them for each feature
+    for str_variables, feature_shap_values in shap_results: # type: ignore
         for var_name, feature_shap_value in zip(str_variables, feature_shap_values):
             mean_shap_values[var_name] += feature_shap_value
+
 
     # Normalize by number of equations after aggregation
     for feature in feature_names: 
