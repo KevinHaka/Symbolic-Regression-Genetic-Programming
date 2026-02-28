@@ -5,7 +5,6 @@ from sympy import lambdify
 from joblib import Parallel, delayed
 from shap import SamplingExplainer, kmeans
 from sklearn.preprocessing import StandardScaler
-
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..methods.gp import GP
@@ -195,13 +194,17 @@ def select_features_from_pretrained_models(
         n_features = len(feature_names)
         n_top_features = max(1, round(np.log2(n_features)))
 
-    # Compute SHAP values for each GP equation in parallel
-    shap_results = Parallel(n_jobs=-1)(
-        delayed(warnings_manager)(
-            get_shap_values, warning_filters, 
-            X_train, gp_equation, int(rng.integers(0, 2**32))
+    # Compute SHAP values for each GP equation in parallel and suppress specific warnings during computation
+    shap_results = warnings_manager(
+        Parallel(n_jobs=-1),
+        [{"action": "ignore", "message": r".*A worker stopped while some jobs were given to the executor.*", "category": UserWarning}],
+        (
+            delayed(warnings_manager)(
+                get_shap_values, warning_filters, 
+                X_train, gp_equation, int(rng.integers(0, 2**32))
+            )
+            for X_train, gp_equation in zip(X_trains, gp_equations)
         )
-        for X_train, gp_equation in zip(X_trains, gp_equations)
     )
 
     # Aggregate SHAP values across all equations by summing them for each feature
