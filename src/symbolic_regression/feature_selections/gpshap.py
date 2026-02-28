@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 
 from sympy import lambdify
-from shap import SamplingExplainer
 from joblib import Parallel, delayed
+from shap import SamplingExplainer, kmeans
+from sklearn.preprocessing import StandardScaler
 
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,11 +48,24 @@ def get_shap_values(
         # Create numpy-compatible lambda function from sympy expression
         lambda_func = lambdify(expr_variables, sympy_expr, modules="numpy")
         str_variables = [str(var) for var in expr_variables]
-        
+
+        # Check if we have more than 100 training samples
+        if len(X_train) > 100:
+            # Use KMeans to find 100 representative background samples for SHAP
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_train[str_variables])
+            background_summary = kmeans(X_scaled, 100)
+
+            # convert cluster centers back to original scale
+            background_summary.data = scaler.inverse_transform(background_summary.data)
+
+        # Use the original training data as background if we have 100 or fewer samples
+        else: background_summary = X_train[str_variables].copy()
+
         # Create SHAP explainer for the equation function
         explainer = SamplingExplainer(
             lambda X: lambda_func(*X.T),
-            X_train[str_variables],
+            background_summary,
             seed=int(rng.integers(0, 2**32))
         )
 
@@ -153,7 +167,7 @@ def select_features(
     return selected_features, mean_shap_values_selected_features
 
 def select_features_from_pretrained_models(
-    X_trains: Tuple[pd.DataFrame],
+    X_trains: Tuple[pd.DataFrame, ...],
     gp_equations: List[pd.Series],
     n_top_features: Optional[int] = None,
     random_state: Optional[int] = None
@@ -194,7 +208,6 @@ def select_features_from_pretrained_models(
     for str_variables, feature_shap_values in shap_results: # type: ignore
         for var_name, feature_shap_value in zip(str_variables, feature_shap_values):
             mean_shap_values[var_name] += feature_shap_value
-
 
     # Normalize by number of equations after aggregation
     for feature in feature_names: 
