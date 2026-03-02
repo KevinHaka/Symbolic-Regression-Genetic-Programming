@@ -20,7 +20,7 @@ class GPPI(BaseMethod):
         pysr_params: Optional[Dict[str, Any]] = None
     ):
         """
-        Initialize the GPPPI method.
+        Initialize the GPPI method.
         
         This method first runs GP, then uses Permutation Importance to select the most important
         features from the resulting equations, and finally runs GP again on the subset of selected features.
