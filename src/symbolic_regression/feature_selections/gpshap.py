@@ -49,7 +49,7 @@ def get_shap_values(
         str_variables = [str(var) for var in expr_variables]
 
         # Check if we have more than 100 training samples
-        if len(X_train) > 100:
+        if len(X_train[str_variables].drop_duplicates()) > 100:
             # Use KMeans to find 100 representative background samples for SHAP
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X_train[str_variables])
