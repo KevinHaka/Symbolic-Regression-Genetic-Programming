@@ -10,9 +10,10 @@ def plot_results(
     dataframe: pd.DataFrame,
     nrows: int = 1,
     ncols: Optional[int] = None,
+    subplot_kwargs: Optional[dict] = None,
     group_level: str = "dataset",
-    value_level: str = "metric",
-    value_key: str = "test_losses",
+    value_level: Optional[str] = "metric",
+    value_key: Optional[str] = "test_losses",
     plotting_function: Callable = sns.boxenplot
 ) -> tuple[Figure, np.ndarray]:
     """
@@ -26,11 +27,13 @@ def plot_results(
         Number of rows of subplots (default is 1).
     ncols : int or None, optional
         Number of columns of subplots. If None, it is set to ceil(n / nrows) where n is the number of unique groups.
+    subplot_kwargs : dict, optional
+        Additional keyword arguments to pass to plt.subplots() for subplot creation.
     group_level : str, optional
         The column MultiIndex level to use for grouping subplots (default is "dataset").
-    value_level : str, optional
+    value_level : str or None, optional
         The column MultiIndex level to use for selecting values (default is "metric").
-    value_key : str, optional
+    value_key : str or None, optional
         The specific key in value_level to plot (default is "test_losses").
     plotting_function : callable
         A function that takes a DataFrame and an Axes object to create the plot (default is sns.boxenplot).
@@ -51,26 +54,26 @@ def plot_results(
     if ncols is None: ncols = int(np.ceil(n / nrows))
 
     # Create subplots
-    fig, axes = plt.subplots(nrows, ncols, sharex=True)
+    fig, axes = plt.subplots(nrows, ncols, **(subplot_kwargs or {}))
 
     # Ensure axes is always iterable
     if nrows * ncols == 1: axes = np.array([axes])
-    if nrows > 1: axes = axes.flatten()
+    else: axes = axes.flatten()
 
     # Plot for each group
-    for idx, (ax, group_name) in enumerate(zip(axes, group_names)):
+    for ax, group_name in zip(axes, group_names):
         # Select columns for the current group in group_level
         df = dataframe.xs(key=group_name, level=group_level, axis=1)
 
-        # Select columns for the specified value_key in value_level
-        df = df.xs(key=value_key, level=value_level, axis=1) # type: ignore
+        if (value_key is not None) and (value_level is not None):
+            # Select columns for the specified value_key in value_level
+            df = df.xs(key=value_key, level=value_level, axis=1) # type: ignore
 
         df.columns.name = None # Remove column name for clarity
         plotting_function(data=df, ax=ax)
         ax.set_title(group_name)
 
-        # Set y-label only for the first column
-        if idx % ncols == 0: ax.set_ylabel("Loss")
+    # Turn off any unused subplots
+    for ax in axes[len(group_names):]: ax.axis('off')
 
-    fig.suptitle(value_key) # Set overall title
     return fig, axes
