@@ -62,8 +62,8 @@ def load_pickle_file(
         FileNotFoundError: If the file doesn't exist.
     """
 
-    # if not os.path.exists(file_path):
-    #     raise FileNotFoundError(f"Pickle file not found: {file_path}")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
     
     with open(file_path, 'rb') as f:
         return dill.load(f)
