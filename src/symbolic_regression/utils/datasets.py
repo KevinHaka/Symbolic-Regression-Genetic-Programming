@@ -351,7 +351,7 @@ def _generate_F1_dataset(
     features to test feature selection methods. The target follows Newton's gravitational
     law formula.
 
-    Formula: F1 = -g * (X1 * X2) / X3**2
+    Formula: F1 = -g * (X1 * X2) / X3^2
     where g = 6.67408e-11 (gravitational constant)
 
     Parameters
@@ -389,7 +389,6 @@ def _generate_F1_dataset(
 
     # Create column names
     variable_names = ['X1', 'X2', 'X3'] + [f'noise_{i+1}' for i in range(n_noise_features)]
-    variable_names[-1] += '_F1'  # Unique name for last noise feature
 
     # Combine informative and noise features
     variable_values = np.column_stack((X1, X2, X3, noise_features))
@@ -411,7 +410,7 @@ def _generate_F2_dataset(
     "Improving Generalization of Genetic Programming for High-Dimensional 
     Symbolic Regression with Shapley Value Based Feature Selection" paper.
 
-    Formula: F2 = 30 * X1 * X3 / ((X1 - 10) * X2**2)
+    Formula: F2 = 30 * X1 * X3 / ((X1 - 10) * X2^2)
 
     Returns
     -------
@@ -438,7 +437,6 @@ def _generate_F2_dataset(
 
     # Create column names
     variable_names = ['X1', 'X2', 'X3'] + [f'noise_{i+1}' for i in range(n_noise_features)]
-    variable_names[-1] += '_F2'  # Unique name for last noise feature
 
     # Combine informative and noise features
     variable_values = np.column_stack((X1, X2, X3, noise_features))
@@ -494,7 +492,6 @@ def _generate_friedman1_dataset(
 
     # Create column names
     variable_names = ['X1', 'X2', 'X3', 'X4', 'X5'] + [f'noise_{i+1}' for i in range(n_features - 5)]
-    variable_names[-1] += '_friedman1'  # Unique name for last noise feature
 
     # Build DataFrame with informative and noise features
     X = pd.DataFrame(X, columns=variable_names)
@@ -548,7 +545,6 @@ def _generate_friedman2_dataset(
 
     # Create column names
     variable_names = ['X1', 'X2', 'X3', 'X4']
-    variable_names[-1] += '_friedman2'  # Unique name for last noise feature
 
     # Build DataFrame with informative and noise features
     X = pd.DataFrame(X, columns=variable_names)
@@ -571,7 +567,7 @@ def _generate_friedman3_dataset(
 
     The ground-truth relationship is:
 
-        y = arctan( (X2 * X3 - 1 / (X2 * X4)) / X1 ) + ε,
+        y = arctan((X2 * X3 - 1 / (X2 * X4)) / X1) + ε,
 
     where the input features are independently sampled from:
         X1 ~ U(0, 100)
@@ -603,7 +599,6 @@ def _generate_friedman3_dataset(
 
     # Create column names
     variable_names = ['X1', 'X2', 'X3', 'X4']
-    variable_names[-1] += '_friedman3'  # Unique name for last feature
 
     # Build DataFrame
     X = pd.DataFrame(X, columns=variable_names)
