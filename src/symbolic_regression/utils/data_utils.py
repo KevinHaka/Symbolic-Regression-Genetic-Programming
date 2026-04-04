@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
+from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 def all_values_real(
@@ -77,6 +78,48 @@ def organize_results(
         features[dataset][method].append(task_result['features'])
 
     return losses, equations, features
+
+def get_execution_times(
+    data_list: List[Dict[str, Any]]
+) -> Dict[str, Dict[str, np.ndarray]]:
+    """
+    Extracts execution times from a list of parsed pickle file metadata and 
+    groups them by dataset and method.
+
+    Parameters
+    ----------
+    data_list : list of dict
+        A list containing dictionaries with metadata from parsed pickle files. 
+        Each dictionary is expected to have 'kwargs' (containing 'dataset_name' 
+        and 'method_name') and 'metadata' (containing 'execution_duration_seconds').
+
+    Returns
+    -------
+    dict
+        A nested dictionary where the first-level keys are dataset names, 
+        the second-level keys are method names, and the values are NumPy 
+        arrays containing the execution durations in seconds.
+    """
+    # Create a nested defaultdict to store execution times temporarily
+    temp_dict = defaultdict(lambda: defaultdict(list))
+    
+    # Iterate through the parsed data and group the execution times
+    for item in data_list:
+        dataset = item['kwargs']['dataset_name']
+        method = item['kwargs']['method_name']
+        exec_time = item['metadata']['execution_duration_seconds']
+        
+        temp_dict[dataset][method].append(exec_time)
+        
+    # Convert the defaultdict back to a standard dictionary with NumPy arrays
+    final_dict = {}
+    for dataset, methods in temp_dict.items():
+        final_dict[dataset] = {}
+        
+        for method, times in methods.items():
+            final_dict[dataset][method] = np.array(times)
+            
+    return final_dict
 
 def flatten_dict(
     nested: Dict
