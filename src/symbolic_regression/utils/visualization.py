@@ -48,7 +48,7 @@ def plot_results(
 
     # Get unique group names from the specified MultiIndex level
     group_names = dataframe.columns.get_level_values(group_level).unique()
-    n = len(group_names)
+    n = len(group_names) # Number of unique groups to plot
 
     # Determine number of columns if not provided
     if ncols is None: ncols = int(np.ceil(n / nrows))
@@ -73,7 +73,10 @@ def plot_results(
         plotting_function(data=df, ax=ax)
         ax.set_title(group_name)
 
+    # Restore x-tick labels for the last plot in each column
+    for ax in axes[n-ncols:n]: ax.tick_params(axis='x', labelbottom=True)
+
     # Turn off any unused subplots
-    for ax in axes[len(group_names):]: ax.axis('off')
+    for ax in axes[n:]: ax.axis('off')
 
     return fig, axes
