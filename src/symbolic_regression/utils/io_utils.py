@@ -14,7 +14,7 @@ from email.message import EmailMessage
 def load_pickle_files(
     directory: str,
     suffix: str = '.pkl'
-) -> List[Dict]:
+) -> List:
     """
     Recursively finds and loads data from pickle files in a directory.
 
@@ -27,7 +27,7 @@ def load_pickle_files(
         suffix (str, optional): The file extension to look for.
 
     Returns:
-        List[Dict]: A list containing the loaded data from each pickle file. 
+        List: A list containing the loaded data from each pickle file. 
     """
 
     loaded_data = [] # List to store loaded data.
@@ -45,28 +45,6 @@ def load_pickle_files(
                     loaded_data.append(dill.load(f))
     
     return loaded_data
-
-def load_pickle_file(
-    file_path: str
-) -> Dict:
-    """
-    Load data from a single pickle file.
-    
-    Args:
-        file_path (str): Path to the pickle file.
-        
-    Returns:
-        Dict: The loaded data from the pickle file.
-        
-    Raises:
-        FileNotFoundError: If the file doesn't exist.
-    """
-
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File not found: {file_path}")
-    
-    with open(file_path, 'rb') as f:
-        return dill.load(f)
 
 def persist(
     func: Optional[Callable] = None,
