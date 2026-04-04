@@ -189,7 +189,7 @@ def fit_and_evaluate_best_equation(
             signature(PySRRegressor).parameters['complexity_of_constants'].default
         )
 
-        return _create_mean_baseline(
+        return create_mean_baseline(
             y_train=train_val_test_set[3],
             y_val=train_val_test_set[4],
             y_test=train_val_test_set[5],
@@ -361,7 +361,65 @@ def process_task(
     # Return results if specified
     if return_results: return results
 
-def _create_mean_baseline(
+def tree_size(
+    expr: sp.Basic,
+    weights: dict[type, int | float] | None = None,
+    default_weight: int | float = 1
+) -> int | float:
+    """
+    Compute the size of a SymPy expression tree.
+
+    Each node in the tree contributes a weight to the total size. The weight
+    of a node is determined by its type, using the first match found in
+    ``weights`` after sorting by MRO depth (most specific type first).
+
+    Parameters
+    ----------
+    expr : sympy.Basic
+        The SymPy expression whose tree size is to be computed.
+    weights : dict[type, int | float], optional
+        A mapping from SymPy types to their corresponding weights.
+        More specific types (deeper in the class hierarchy) take precedence
+        over more general ones, regardless of insertion order.
+        If None, all nodes use ``default_weight``.
+    default_weight : int or float, optional
+        The weight assigned to any node whose type is not found in
+        ``weights``. Default is 1.
+
+    Returns
+    -------
+    int or float
+        The total weighted size of the expression tree.
+    """
+
+    if weights is None: weights = {}
+
+    # Sort by MRO length descending so that more specific types (e.g. One)
+    # are matched before more general ones (e.g. Integer).
+    # We do this ONCE outside the recursion for better performance.
+    sorted_weights = sorted(
+        weights.items(),
+        key=lambda kv: len(kv[0].__mro__),
+        reverse=True
+    )
+
+    # Compute the size of the tree recursively.
+    def _compute_size(
+        node: sp.Basic,
+    ) -> int | float:
+        node_weight = default_weight
+
+        for node_type, w in sorted_weights:
+            if isinstance(node, node_type):
+                node_weight = w
+                break  # Stop at the first (most specific) match.
+
+        # Recursively accumulate the weight of this node and all its children.
+        return node_weight + sum(_compute_size(arg) for arg in node.args)
+
+    return _compute_size(expr)
+
+def create_mean_baseline(
     y_train: np.ndarray,
     y_val: np.ndarray,
     y_test: np.ndarray,
