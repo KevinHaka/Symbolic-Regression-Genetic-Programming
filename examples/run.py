@@ -61,10 +61,10 @@ def main() -> None:
     sub_test_size = 0.3
 
     # For GPSHAP and GPPI
-    fs_runs = 5
+    fs_runs = 30
 
     # For GPCMI
-    n_permutations = 100
+    n_permutations = 1000
     alpha = 0.01
     k_nearest_neighbors = 5
 
@@ -72,7 +72,7 @@ def main() -> None:
     n_submodels = 3
 
     # General
-    n_runs = 10
+    n_runs = 100
     test_size = 0.3
     val_size = 0.2
     record_interval = 5
@@ -84,24 +84,24 @@ def main() -> None:
 
     # Choose datasets to run
     dataset_names = [
-        ("F1", {"random_state": rng.integers(0, 2**32)}),
+        #("F1", {"random_state": rng.integers(0, 2**32)}),
         #("F2", {"random_state": rng.integers(0, 2**32)}),
-        ("Friedman1", {"n_samples": 1000, "noise": 0.5, "random_state": rng.integers(0, 2**32)}),
+        #("Friedman1", {"n_samples": 1000, "noise": 0.5, "random_state": rng.integers(0, 2**32)}),
         #("Friedman2", {"n_samples": 1000, "noise": 38, "random_state": rng.integers(0, 2**32)}),
         #("Friedman3", {"n_samples": 1000, "noise": .032, "random_state": rng.integers(0, 2**32)}),
-        #"197_cpu_act",
-        #("4544_GeographicalOriginalofMusic", "4544_GOM"),
-        # "505_tecator",
-    	# ("Communities and Crime", "CCN"),
-        # ("Communities and Crime Unnormalized", "CCUN"),
+        "197_cpu_act",
+        ("4544_GeographicalOriginalofMusic", "4544_GOM"),
+        "505_tecator",
+    	("Communities and Crime", "CCN"),
+        ("Communities and Crime Unnormalized", "CCUN"),
         # ("Superconductivty Data", "Superconductivity"), 
     ]
     datasets = load_datasets(dataset_names) # Load datasets
 
     # PySR parameters
     pysr_params = {
-        "niterations": 20,
-        "populations": 1,
+        "niterations": 100,
+        "populations": 20,
         "population_size": 25,
         "binary_operators": ["+", "-", "*"],
         "unary_operators": ["sqrt", "inv", "sin", "atan"],
