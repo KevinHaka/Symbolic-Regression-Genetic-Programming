@@ -19,7 +19,8 @@ dependencies = [
     "NPEET @ git+https://github.com/gregversteeg/NPEET.git",
     "pmlb>=1.0.1.post3",
     "ucimlrepo>=0.0.7",
-    "seaborn>=0.13.2"
+    "seaborn>=0.13.2",
+    "func_timeout>=4.3.5"
 ]
 
 authors = [
